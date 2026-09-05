@@ -85,7 +85,15 @@ A one-page test placed 213 spans and successfully produced both a normal searcha
 
 This is important historically: Marker was **not** discarded because it could not produce a useful searchable PDF. A working image-preserving searchable-PDF path was demonstrated with Marker output.
 
-## 5. Page splitting, downscaling, and CPU execution still left text recognition as the bottleneck
+## 5. OCRmyPDF / Tesseract was tried as a lighter detour, but recognition was not good enough on the target material
+
+Because multi-page Marker processing was too heavy, OCRmyPDF / Tesseract was also tested as a simpler and lighter searchable-PDF route.
+
+On the Japanese table material being processed at the time, however, recognition quality was judged to be noticeably worse than Marker. The project therefore did not simply replace Marker with a lightweight off-the-shelf searchable-PDF tool. Instead, it returned to the question of whether **the useful parts of Marker could be kept while replacing the expensive text-recognition stage with another OCR engine**.
+
+That detour helped motivate the later architectural separation between layout/table structure and text recognition.
+
+## 6. Page splitting, downscaling, and CPU execution still left text recognition as the bottleneck
 
 To avoid multi-page memory failures, the workflow was changed to render one PDF page at a time, limit image dimensions, use CPU execution, and restrict thread counts.
 
@@ -100,9 +108,23 @@ elapsed time: about 12 min 20 s
 
 This clarified that not every part of Marker was equally expensive. The **text-recognition stage was the main bottleneck**.
 
+### How the development timing records were interpreted
+
+Several development runs, under different settings and processing paths, left the following representative timing records:
+
+| Run | Example development timing | What it indicated at the time |
+| --- | ---: | --- |
+| Marker normal processing example | about 605 s | some one-page runs were already too heavy for routine use |
+| Marker JSON-oriented example | about 458 s | JSON output did not make the workflow lightweight |
+| Marker / Surya text recognition | about 12 min 20 s for 224 regions | text recognition was the dominant bottleneck |
+| Marker with OCR disabled / TableCell detection | about 4 s for 168 cells | table-structure detection itself was fast |
+| PaddleOCR small example | about 3.81 s | promising as a practical lightweight recognizer |
+
+**Important:** this is not a controlled same-input, same-resolution, same-stage speed benchmark. These values come from different development runs and are presented only to explain how the bottleneck was identified and why a different architecture was explored.
+
 The next design therefore separated table structure from text recognition.
 
-## 6. Marker became very fast when used only for table structure
+## 7. Marker became very fast when used only for table structure
 
 Using Marker TableConverter with OCR disabled, the project tested extracting only table regions, row/column structure, and TableCell bounding boxes.
 
@@ -128,7 +150,7 @@ Rather than OCRing 168 cell crops independently, the full page could be recogniz
 
 At this point it was clear that Marker remained useful for structure, even though its own text-recognition stage was too expensive for the intended workflow.
 
-## 7. NDL / Yomitoku / Marker / PaddleOCR were compared on the same table page
+## 8. NDL / Yomitoku / Marker / PaddleOCR were compared on the same table page
 
 To select the text-recognition engine, outputs from five approaches were compared on the same representative table page:
 
@@ -154,7 +176,7 @@ Paddle-small           717        425     413     12      19      202     214
 
 These values were not interpreted as “more characters means better OCR.” Different engines segment lines, cells, punctuation, and mixed alphanumeric text differently. The table was used mainly to reveal differences in output behavior.
 
-## 8. Whole-output string similarity was also measured, but not treated as an accuracy score
+## 9. Whole-output string similarity was also measured, but not treated as an accuracy score
 
 Normalized final strings were compared with a string-similarity measure as an additional diagnostic.
 
@@ -177,7 +199,7 @@ However, this was **not** treated as an OCR-accuracy metric. A whole-string comp
 
 Because of those limitations, the project moved to spatial, cell-level comparison.
 
-## 9. A 168-cell comparison table was built with the original cell image beside every OCR output
+## 10. A 168-cell comparison table was built with the original cell image beside every OCR output
 
 Marker's 168 detected cells were used as a spatial frame. For each cell, an HTML/CSV comparison view displayed the original image crop alongside text from the OCR engines.
 
@@ -199,7 +221,29 @@ Majority agreement was **not** treated as ground truth. The original cell image 
 
 This image-backed comparison was much more informative than total-character counts or whole-document string similarity because it showed exactly what each engine read from each location.
 
-## 10. PaddleOCR bounding boxes were then compared directly inside Marker TableCells
+## 11. The evaluation method itself was refined step by step
+
+The project did not try to rank OCR engines with a single number. The comparison method evolved as the limitations of each earlier method became clear:
+
+```text
+character-count / character-type comparison
+↓
+whole-output string similarity
+↓
+recognition that reading order and line breaks distort whole-string scores
+↓
+168 Marker cells + original image crops in an HTML/CSV comparison
+↓
+spatial assignment of OCR boxes into Marker TableCells
+↓
+text comparison within corresponding cells
+```
+
+A particularly important rule was that **majority agreement among OCR engines was not treated as ground truth**. Multiple engines can make the same mistake, so the original image crop remained visible beside every cell result for human verification.
+
+This made it possible to avoid treating whole-output similarity as “accuracy” and instead examine what happened at each location in the actual source page.
+
+## 12. PaddleOCR bounding boxes were then compared directly inside Marker TableCells
 
 The final comparison assigned PaddleOCR OCR boxes to Marker TableCell boundaries and compared text within the same spatial cells.
 
@@ -223,7 +267,7 @@ These values describe one specific Japanese table page and one development confi
 
 They did, however, show that **for this material, PaddleOCR alone provided both usable recognition and usable bounding boxes**.
 
-## 11. Why the Marker + PaddleOCR hybrid was not kept as the production architecture
+## 13. Why the Marker + PaddleOCR hybrid was not kept as the production architecture
 
 By this stage, a Marker + PaddleOCR hybrid was technically feasible.
 
@@ -264,7 +308,7 @@ page image
 
 Marker was therefore not rejected because its quality was poor. It was left out of the production path because **PaddleOCR alone was sufficient for the final requirement and allowed a simpler, lighter, and easier-to-maintain architecture**.
 
-## 12. Calling PaddleOCR was only one part of the practical pipeline
+## 14. Calling PaddleOCR was only one part of the practical pipeline
 
 Character recognition alone was not enough for an archival workflow. The surrounding processing gradually became part of the project.
 
@@ -286,7 +330,7 @@ PDF / image / image folder
 
 Per-page JSON is retained so that PDF rendering, font handling, and verification can be improved later without rerunning OCR.
 
-## 13. Japanese fonts, variant characters, and rare CJK code points
+## 15. Japanese fonts, variant characters, and rare CJK code points
 
 A correct OCR string can still be lost from a searchable PDF if the embedded font does not contain the required Unicode code point.
 
@@ -312,7 +356,7 @@ unsupported characters: 0
 
 A real supplementary-plane character, `U+20000`, was also rendered through the production PDF path using Jigmo2 and extracted exactly with pypdf.
 
-## 14. Ghostscript compression and ReportLab ToUnicode CMaps
+## 16. Ghostscript compression and ReportLab ToUnicode CMaps
 
 For archival use, creating a searchable PDF is not enough if compression later damages its text layer.
 
@@ -327,7 +371,7 @@ The fix is applied at runtime and does not modify installed site-packages.
 
 After this change, a real 10-page document yielded 7,766 extracted characters from the normal searchable PDF and 7,766/7,766 after 150-dpi Ghostscript compression, with retention ratio 1.000. Ghostscript also parsed both versions without the earlier CMap warning.
 
-## 15. Data size and restartability
+## 17. Data size and restartability
 
 Saving raw PaddleOCR results directly to JSON can produce very large files because image arrays and other intermediate data may be included.
 
@@ -343,7 +387,7 @@ aggregation time:     47.86 s → 0.04 s
 
 Keeping per-page compact JSON also makes it possible to improve PDF rendering, fonts, or compression without rerunning OCR.
 
-## 16. Preserve pages with zero OCR text
+## 18. Preserve pages with zero OCR text
 
 Pages dominated by paintings, photographs, or blank areas can legitimately produce zero OCR text.
 
@@ -351,7 +395,7 @@ An early implementation treated such pages as errors. For archival material, how
 
 The current renderer therefore keeps zero-text pages as image-only PDF pages, preserving page count and order.
 
-## 17. Public-release work improved reproducibility
+## 19. Public-release work improved reproducibility
 
 Preparing a public repository was not only a matter of removing private information. It was also used as an opportunity to test whether a third party could reproduce the workflow from a clean checkout.
 
@@ -369,7 +413,7 @@ The public-release work added or formalized:
 
 A clean exported tree was tested from fresh local environments, successfully completing environment creation, font retrieval, regression tests, supplementary-plane PDF validation, and the static smoke test.
 
-## 18. Current scope and limitations
+## 20. Current scope and limitations
 
 The value of this repository is not in reinventing PaddleOCR itself. It is in turning practical lessons from Japanese-document OCR work into a reusable workflow covering:
 

@@ -14,7 +14,15 @@ PaddleOCRを利用して、PDF・単一画像・画像フォルダから**検索
 - **文字単位のフォントフォールバック** — M PLUS 1p と Jigmo / Jigmo2 / Jigmo3 を組み合わせ、広いCJK文字範囲を扱います。
 - **再現性と検証を重視** — OCR依存関係の固定、フォント取得時の整合性確認、PDF/CMap回帰テスト、検索テキスト保持確認を行います。
 
-このpipelineがどのような実務上の問題から生まれ、NDL古典OCR-Lite・Yomitoku・Marker等との比較を経てPaddleOCR中心の構成になったかは、[開発背景と設計判断](docs/DEVELOPMENT_BACKGROUND.md) にまとめています。
+## なぜPaddleOCR中心の構成なのか
+
+開発過程ではMarkerも詳しく検証し、OCRに成功した箇所の品質は非常に良好でした。Markerの `blocks.json` から文字列とbboxを取り出し、原画像保持型searchable PDFを作るところまでも成立しています。そのため、Markerを採用しなかった理由は「認識精度が低かったから」ではありません。
+
+一方、当時の開発環境ではMarker内部の文字認識が実用上重く、複数ページ処理ではMPSメモリ不足も発生しました。OCRを無効にしたMarkerのTableCell検出は高速だったため、一時は「Markerで表構造、PaddleOCRで文字認識」というハイブリッドも検討しました。
+
+その後、同じ表資料で複数OCRを比較し、総文字数や全文類似度だけでなく、原画像付き168セル比較やMarker TableCellへのPaddleOCR bbox割り当てまで行いました。その結果、PaddleOCR単独でも実用的な文字認識とbboxを得られることを確認しました。最終目的は表をExcel等へ完全に論理復元することではなく、**原ページ画像を保持したまま検索可能にすること**だったため、本番構成はより単純なPaddleOCR中心のパイプラインへ収束しました。
+
+比較経緯、実測値、評価方法の限界は [開発背景と設計判断](docs/DEVELOPMENT_BACKGROUND.md) に詳しくまとめています。
 
 ## 図表・複雑な版面に向いている理由
 

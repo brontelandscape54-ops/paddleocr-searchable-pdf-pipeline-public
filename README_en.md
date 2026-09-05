@@ -14,7 +14,15 @@ A practical pipeline for turning PDFs, single images, or image folders into sear
 - **Character-by-character font fallback** — M PLUS 1p is combined with Jigmo/Jigmo2/Jigmo3 for broad CJK coverage.
 - **Reproducible setup and validation** — pinned OCR dependencies, verified font downloads, PDF/CMap regression tests, and searchable-text verification.
 
-For the practical problems that motivated the project, the comparison work involving NDL Classical OCR Lite, Yomitoku, Marker, and PaddleOCR, and the design decisions that followed, see [Development Background and Design Rationale](docs/DEVELOPMENT_BACKGROUND_en.md).
+## Why the production path centers on PaddleOCR
+
+Marker was also tested in depth during development, and its recognition quality was very good where OCR succeeded. A working image-preserving searchable PDF was built from Marker `blocks.json` text and bounding-box output, so Marker was **not** rejected because its OCR quality was poor or because it could not support searchable-PDF generation.
+
+The practical problem was operational cost on the development machine. Marker text recognition was heavy enough to make multi-page processing difficult, including MPS out-of-memory failures. With OCR disabled, however, Marker TableCell detection was fast, so an intermediate hybrid architecture was explored: Marker for table structure and PaddleOCR for text recognition.
+
+The evaluation was then refined step by step, from character counts and whole-output similarity to an image-backed 168-cell comparison and direct assignment of PaddleOCR boxes into Marker TableCells. For the representative material, PaddleOCR alone provided usable recognition and bounding boxes. Because the final requirement was not perfect spreadsheet-style table reconstruction, but **preserving the original page while making its text searchable**, the production architecture was simplified to a PaddleOCR-centered pipeline.
+
+For the practical problems that motivated the project, the OCRmyPDF/Tesseract detour, the Marker/NDL/Yomitoku/PaddleOCR comparisons, timing measurements, and the limitations of the evaluation methods, see [Development Background and Design Rationale](docs/DEVELOPMENT_BACKGROUND_en.md).
 
 ## Layout preservation: tables and figures
 
