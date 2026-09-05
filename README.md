@@ -1,79 +1,106 @@
 # PaddleOCR Searchable PDF Pipeline
 
-PaddleOCRを利用して、PDF・単一画像・画像フォルダから検索可能PDFと構造化OCR成果物を作るための実用パイプラインです。
+日本語 | [English](README_en.md)
+
+PaddleOCRを利用して、PDF・単一画像・画像フォルダから**検索可能PDF**と構造化OCR成果物を作るための実用パイプラインです。日本語の古典籍・近世近代史料・寺社文書など、旧字・異体字や複雑な版面を含む資料での利用を意識しています。
 
 > This is an unofficial independent project using PaddleOCR. It is not affiliated with or endorsed by PaddlePaddle.
 
-## Features
+## このパイプラインの特徴
+
+- **日本語史料・古典籍を意識したOCRワークフロー** — 旧字・異体字・CJK拡張文字を含む資料を想定しています。
+- **原画像をそのまま保持した検索可能PDF** — 表示面はスキャン画像のままで、OCR結果を透明なUnicodeテキストレイヤーとして重ねます。
+- **表・挿図・罫線・欄外書き込みなど複雑な版面を視覚的に保持** — OCR文字列からページを描き直さないため、原資料の見た目を崩しません。
+- **文字単位のフォントフォールバック** — M PLUS 1p と Jigmo / Jigmo2 / Jigmo3 を組み合わせ、広いCJK文字範囲を扱います。
+- **再現性と検証を重視** — OCR依存関係の固定、フォント取得時の整合性確認、PDF/CMap回帰テスト、検索テキスト保持確認を行います。
+
+## 図表・複雑な版面に向いている理由
+
+検索可能PDFでは、**元のスキャン画像そのものを表示面として保持**し、その上にOCR結果を透明なUnicodeテキストとして配置します。
+
+そのため、次のような要素をOCR結果から無理に再構成する必要がありません。
+
+- 表組み・罫線
+- 挿図・図版
+- 印章
+- 欄外書き込み
+- 変則的な文字配置
+- 古典籍や史料特有の複雑な版面
+
+見た目は原画像のままなので、プレーンテキスト化だけでは失われるページ上の情報を保ちつつ、全文検索や文字コピーを可能にできます。
+
+**注意:** これは表の論理構造をExcelのように復元する専用のtable extractionエンジンではありません。行・列・セル構造を完全に再構築することを目的としたものではなく、**図表を含む原ページの見た目を保ったまま検索可能化すること**が強みです。
+
+## 処理の流れ
 
 ```text
-PDF / image / image folder
-→ OCR-safe preprocessing for oversized PDF pages
-→ page images
+PDF / 画像 / 画像フォルダ
+→ 巨大PDFページのOCR-safe前処理
+→ ページ画像化
 → PaddleOCR
-→ per-page JSON / TXT
-→ merged TXT / Markdown / JSON / JSONL
-→ character-by-character Japanese font fallback
-→ searchable PDF pages
-→ merged searchable PDF
-→ searchable-text verification
-→ optional Ghostscript-compressed searchable PDF
+→ ページごとの JSON / TXT
+→ TXT / Markdown / JSON / JSONL 結合
+→ 日本語フォントの文字単位フォールバック
+→ ページごとの検索可能PDF
+→ PDF結合
+→ 検索テキスト検証
+→ 任意でGhostscriptによる圧縮版PDF生成
 ```
 
-The searchable-PDF renderer embeds real TrueType fonts and places an invisible Unicode text layer over each page image. It checks each font's cmap and can switch fonts character by character, which is useful for historical Japanese text containing old forms, variant characters, or CJK extension characters.
+検索可能PDF生成では、実在するTrueTypeフォントを埋め込み、各フォントのcmapを確認して文字ごとに使用フォントを選択します。
 
-## Tested environment
+## 動作確認環境
 
-The current pipeline has been validated primarily on **macOS**.
+現在、主として **macOS** で検証しています。
 
 - Bash
 - Python 3.10–3.13
-- PaddleOCR / PaddleX / ONNX Runtime versions pinned in `requirements-paddle.txt`
-- helper PDF/image libraries in `requirements-helper.txt`
-- optional Ghostscript (`gs`) for compressed PDF output
+- `requirements-paddle.txt` に固定した PaddleOCR / PaddleX / ONNX Runtime
+- `requirements-helper.txt` のPDF・画像処理ライブラリ
+- 圧縮PDF生成用のGhostscript（`gs`、任意）
 
-The public version avoids known macOS-only assumptions in its main pipeline where practical. Timing logs use portable `date` forms and font discovery includes common macOS and Linux locations. Linux has not yet been end-to-end validated, so it is not claimed as a tested target yet.
+主要処理から既知のmacOS固有依存はできるだけ除いており、一般的なLinuxフォントパスにも対応しています。ただしLinuxでの完全なend-to-end検証はまだ行っていないため、現時点では正式な検証済み対象とはしていません。
 
-## Quick setup
+## セットアップ
 
-After cloning the public repository, run:
+clone後、次を実行します。
 
 ```bash
 bash tools/setup.sh
 ```
 
-This one command:
+このコマンドで次を行います。
 
-1. checks for Python 3.10–3.13;
-2. creates or reuses `.venv_paddle` for PaddleOCR / PaddleX / ONNX Runtime;
-3. creates or reuses the helper `.venv`;
-4. downloads the recommended Japanese fonts into the ignored local `fonts/` directory;
-5. verifies pinned font sources / checksums;
-6. runs the PDF/CMap regression tests;
-7. validates a real supplementary-plane Jigmo character through PDF generation and exact extraction;
-8. runs the static public smoke test.
+1. Python 3.10–3.13 の確認
+2. PaddleOCR / PaddleX / ONNX Runtime用 `.venv_paddle` の作成または再利用
+3. PDF処理等に使う `.venv` の作成または再利用
+4. 推奨日本語フォントをGit管理外の `fonts/` に取得
+5. フォント配布元・チェックサムの検証
+6. PDF/CMap回帰テスト
+7. Jigmoの補助面文字を使った実PDF生成・抽出検証
+8. public tree のstatic smoke test
 
-Existing working environments are reused. Existing user-provided fonts are preserved by default.
+既存の正常な仮想環境は再利用します。利用者が自分で配置したフォントも、原則として上書きしません。
 
-Useful options:
+主なオプション:
 
 ```bash
-bash tools/setup.sh --rebuild       # rebuild both Python environments
-bash tools/setup.sh --no-fonts      # do not download recommended fonts
-bash tools/setup.sh --force-fonts   # replace setup-managed local fonts
+bash tools/setup.sh --rebuild       # 2つのPython環境を作り直す
+bash tools/setup.sh --no-fonts      # 推奨フォントを取得しない
+bash tools/setup.sh --force-fonts   # setup管理下のフォントを置換する
 ```
 
-Cloning the repository itself never runs external downloads. Font retrieval happens only when you explicitly run `tools/setup.sh` or `tools/setup_fonts.sh`.
+repositoryをcloneしただけでは外部ダウンロードは実行されません。フォント取得は `tools/setup.sh` または `tools/setup_fonts.sh` を明示的に実行したときだけ行われます。
 
-The normal entry point after setup is:
+通常の実行入口は次です。
 
 ```bash
 ./paddleocr.sh "/path/to/input.pdf"
 ```
 
-### Manual setup
+### 手動セットアップ
 
-Advanced users can still perform each step separately:
+個別に構築したい場合は、次のようにも実行できます。
 
 ```bash
 bash tools/rebuild_paddle_venv.sh
@@ -86,11 +113,11 @@ bash tools/setup_fonts.sh
 bash tools/smoke_test_public.sh
 ```
 
-## Japanese font fallback
+## 日本語フォントフォールバック
 
-Font fallback is a core part of the searchable-PDF renderer, not only a visual preference.
+フォントフォールバックは見た目だけの機能ではなく、検索可能PDFのUnicodeテキストレイヤーを成立させるための重要な処理です。
 
-The recommended order is:
+推奨順は次です。
 
 ```text
 MPLUS1p-Medium.ttf
@@ -99,28 +126,28 @@ MPLUS1p-Medium.ttf
 → Jigmo3.ttf
 ```
 
-For every OCR character, the renderer reads each registered TTF's cmap and selects the first font that contains that Unicode code point.
+OCR文字ごとに各TTFのcmapを調べ、そのUnicodeコードポイントを含む最初のフォントを選択します。
 
-- **M PLUS 1p** handles ordinary Japanese text as the primary font.
-- **Jigmo** covers CJK Unified Ideographs in the BMP / Extension A range needed when M PLUS lacks a code point.
-- **Jigmo2** and **Jigmo3** extend fallback coverage into supplementary-plane CJK blocks through Unicode 17.0 / Extension J.
-- If a character is not present in any registered font, the renderer records it as unsupported and prints a warning.
+- **M PLUS 1p** — 通常の日本語文字を主に担当
+- **Jigmo** — M PLUSにないBMP / Extension A周辺の漢字を補完
+- **Jigmo2 / Jigmo3** — Unicode 17.0 / Extension Jまでの補助面CJK文字を補完
+- どのフォントにもない文字はunsupportedとして記録・警告
 
-The renderer also tries a one-character NFKC-normalized form when the original code point is unavailable. This should not be treated as a substitute for suitable historical-character fonts.
+元文字がない場合には、一文字だけのNFKC正規化形も試します。ただし、これは適切な歴史的文字フォントの代替ではありません。
 
-The Jigmo migration was validated against an existing 10-page historical-document OCR result: the old Hanazono configuration and the new Jigmo configuration produced identical coverage totals (`7870` M PLUS occurrences plus `14` fallback occurrences, `9` unique fallback characters, `0` unsupported). A real supplementary-plane character (`U+20000`) was also rendered with Jigmo2, extracted exactly with pypdf, and parsed by Ghostscript without a CMap warning.
+Jigmo移行時には実在する10ページの日本語史料OCRで旧Hanazono構成と比較し、両者とも `M PLUS 7870文字 + fallback 14文字 / 9種 / unsupported 0` で一致しました。また、補助面文字 `U+20000` をJigmo2でPDF化し、pypdfで完全一致抽出でき、GhostscriptでもCMap警告なく解析できることを確認しています。
 
-### Supplying fonts
+### フォントの取得・指定
 
-Font binaries are intentionally **not bundled in Git history**.
+フォント本体はGit履歴には含めません。
 
-The easiest route is:
+推奨フォントは次で取得できます。
 
 ```bash
 bash tools/setup_fonts.sh
 ```
 
-This populates the ignored local directory:
+ローカルには次のように配置されます。
 
 ```text
 fonts/
@@ -131,16 +158,16 @@ fonts/
 └── licenses/
 ```
 
-The setup helper uses pinned sources and integrity checks. See `THIRD_PARTY_LICENSES.md` for provenance and licensing notes.
+配布元・ライセンスについては `THIRD_PARTY_LICENSES.md` を参照してください。
 
-You can instead place your own compatible TTF files under `fonts/`, use system fonts, or set `PADDLE_PDF_FONTS` explicitly:
+自分でTTFを配置したり、`PADDLE_PDF_FONTS` で明示指定したりすることもできます。
 
 ```bash
 export PADDLE_PDF_FONTS="$PWD/fonts/MPLUS1p-Medium.ttf:$PWD/fonts/Jigmo.ttf:$PWD/fonts/Jigmo2.ttf:$PWD/fonts/Jigmo3.ttf"
 ./paddleocr.sh "/path/to/input.pdf"
 ```
 
-The renderer also searches common system font locations on macOS and Linux, including:
+macOS / Linux の一般的なシステムフォント場所も探索します。
 
 ```text
 ~/Library/Fonts
@@ -152,50 +179,46 @@ The renderer also searches common system font locations on macOS and Linux, incl
 /usr/share/fonts
 ```
 
-When invoking `paddle_json_to_searchable_pdf.py` or `tools/report_font_fallbacks.py` directly, `--font-path` may be repeated in priority order. If at least one `--font-path` is supplied, only those explicitly supplied font files are used; automatic local/system fallback discovery is not appended. `PADDLE_PDF_FONTS` behaves the same way as an explicit priority list.
+`paddle_json_to_searchable_pdf.py` や `tools/report_font_fallbacks.py` を直接使う場合、`--font-path` は優先順に複数回指定できます。1つでも明示指定した場合は、そのフォントだけを使い、自動検出フォントを後から追加しません。`PADDLE_PDF_FONTS` も同じく明示的な優先順として扱います。
 
-If no usable Japanese TTF is found, searchable-PDF generation stops with an error rather than silently creating a text layer with an unknown substitute font.
+利用可能な日本語TTFが見つからない場合は、未知の代替フォントで黙ってPDFを作るのではなくエラーで停止します。
 
-### Checking which font was used
+### どのフォントが使われたか確認する
 
-PDF generation prints each registered font and its used-character count. Unsupported characters are also reported.
+PDF生成時には、登録した各フォントと使用文字数、unsupported文字数を表示します。
 
-For a detailed audit from existing PaddleOCR JSON, without rerunning OCR or regenerating the PDF, use:
+既存のPaddleOCR JSONから、OCRをやり直さずに詳細なフォント割当を調べるには次を使います。
 
 ```bash
 .venv/bin/python tools/report_font_fallbacks.py \
   jobs/<job_name>/paddle_ocr/json
 ```
 
-The report includes per-page font usage, source character / Unicode code point, selected font path, fallback characters, unsupported characters, and CSV / JSON summaries.
-
-To validate the supplementary-plane path against the locally installed Jigmo fonts without rerunning OCR:
+Jigmo補助面のPDF経路を単独検証する場合:
 
 ```bash
 .venv/bin/python tools/validate_jigmo_supplementary.py
 ```
 
-This discovers a real `U+10000+` character from Jigmo2/Jigmo3, renders it through the production PDF path, checks exact pypdf extraction, and asks Ghostscript to parse the generated PDF when `gs` is installed.
+## 使い方
 
-## Usage
-
-Run OCR on a PDF:
+PDFをOCRする場合:
 
 ```bash
 ./paddleocr.sh "/path/to/input.pdf"
 ```
 
-Specify a job name and rendering DPI:
+job名と描画DPIを指定する場合:
 
 ```bash
 ./paddleocr.sh "/path/to/input.pdf" my_job_name 180
 ```
 
-Input may be a PDF, a single image, or a directory of page images.
+入力にはPDF、単一画像、ページ画像を入れたディレクトリを指定できます。
 
-Use a new job name when the input document changes. Existing page images and OCR JSON may otherwise be reused intentionally by the restart mechanism.
+入力文書が変わった場合は新しいjob名を使ってください。同じjob名では、再開機能により既存のページ画像やOCR JSONを意図的に再利用することがあります。
 
-## Output
+## 出力
 
 ```text
 jobs/<job_name>/
@@ -218,27 +241,27 @@ jobs/<job_name>/
 └── logs/
 ```
 
-`jobs/` is intentionally excluded from Git. It contains reusable intermediate OCR results and troubleshooting information, so it should not automatically be treated as disposable temporary data.
+`jobs/` はGit管理外です。中間OCR結果やトラブルシュートに役立つ情報を含むため、単なる使い捨て一時ファイルとして扱う設計ではありません。
 
-## Re-running OCR
+## OCRをやり直す
 
-Existing compact JSON is reused by default. To force OCR again:
+既存のcompact JSONは既定で再利用されます。OCRを強制的にやり直す場合:
 
 ```bash
 PADDLE_OVERWRITE=1 ./paddleocr.sh "/path/to/input.pdf" same_job_name 180
 ```
 
-## Large PDF pages
+## 大きすぎるPDFページ
 
-By default, PDF pages estimated to exceed 25 million pixels at the selected DPI are normalized to roughly 3400 px on the long edge before OCR. Normal-sized pages are left unchanged.
+指定DPIで推定25 million pixelsを超えるPDFページは、既定で長辺およそ3400pxになるようOCR前に正規化します。通常サイズのページは変更しません。
 
-Disable this behavior:
+無効化する場合:
 
 ```bash
 PADDLE_NORMALIZE_PDF=0 ./paddleocr.sh "/path/to/input.pdf"
 ```
 
-Tune it:
+閾値を調整する場合:
 
 ```bash
 PADDLE_MAX_PIXELS=30000000 \
@@ -246,28 +269,28 @@ PADDLE_TARGET_LONG_EDGE_PX=3800 \
 ./paddleocr.sh "/path/to/input.pdf" my_job 180
 ```
 
-## Validation and smoke tests
+## 検証とsmoke test
 
-The pipeline does not treat PDF creation alone as success. After merging page PDFs, it verifies that searchable text can be extracted.
+このパイプラインは「PDFが生成できた」だけでは成功扱いにしません。ページPDF結合後に、検索可能テキストを実際に抽出できることを検証します。
 
-If Ghostscript is installed, the pipeline also creates a smaller 150-dpi-oriented PDF and checks that the compressed PDF retains an acceptable amount of extractable text. If that check fails, the invalid compressed output is removed rather than kept as a successful result.
+Ghostscriptがある場合は、150dpi向けの小容量PDFも生成し、圧縮前後で十分な検索テキストが保持されていることを確認します。保持確認に失敗した圧縮PDFは成功成果物として残しません。
 
-Run the static public-tree smoke test:
+static smoke test:
 
 ```bash
 bash tools/smoke_test_public.sh
 ```
 
-Run an end-to-end OCR smoke test with your own input:
+任意の入力を使ったend-to-end OCR smoke test:
 
 ```bash
 bash tools/smoke_test_public.sh "/path/to/input.pdf"
 ```
 
-The public-release regression suite includes tests for empty OCR pages and the ReportLab ToUnicode CMap compatibility fix, including supplementary-plane Unicode mappings.
+回帰テストには、空OCRページとReportLab ToUnicode CMap互換修正、補助面Unicodeマッピングの検証が含まれます。
 
-Ghostscript is optional; without `gs`, the normal searchable PDF remains available and the compression stage is skipped.
+Ghostscriptは任意です。`gs` がなくても通常の検索可能PDFは生成でき、圧縮工程だけがスキップされます。
 
-## Notes on third-party software
+## サードパーティソフトウェア
 
-This repository does not commit PaddleOCR, PaddleX, Japanese font binaries, PyMuPDF/MuPDF, or Ghostscript source trees. They remain third-party components under their respective licenses.
+このrepositoryには、PaddleOCR、PaddleX、日本語フォント本体、PyMuPDF/MuPDF、Ghostscriptのソースツリーは含めません。それぞれのライセンスについては `THIRD_PARTY_LICENSES.md` を参照してください。

@@ -20,6 +20,7 @@ echo "ROOT=$ROOT"
 
 required_files=(
   "README.md"
+  "README_en.md"
   "LICENSE"
   "THIRD_PARTY_LICENSES.md"
   "requirements-paddle.txt"
