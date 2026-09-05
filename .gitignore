@@ -1,0 +1,57 @@
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Virtual environments
+.venv/
+.venv_*/
+venv/
+
+# Logs and local audits
+*.log
+workspace_audit*.txt
+
+# Paddle / model caches
+.paddlex/
+models/
+model_cache/
+
+# Generated OCR outputs
+jobs/
+paddle_outputs/
+marker_safe_outputs/
+marker_table_outputs/
+ocr_cell_comparison_assets/
+ocr_cell_comparison_marker231_assets/
+
+# Generated comparison files
+ocr_cell_comparison*.csv
+ocr_cell_comparison*.html
+
+# Generated PDFs
+*_searchable.pdf
+*_visible_debug.pdf
+*_review.pdf
+
+# Temporary files
+tmp/
+temp/
+
+# Public-release staging output (generated from the private repository)
+public_release/
+
+# Local font files. The public repository documents font setup but does not
+# bundle third-party font binaries by default.
+fonts/
+
+# Additional generated files
+input/
+output_json/
+output_md/
+output_pdf/
+output_table/
+ocr_char_count_comparison*.csv

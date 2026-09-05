@@ -1,0 +1,8 @@
+# Direct dependencies for the PaddleOCR ONNX Runtime environment.
+# Versions are based on the environment that successfully processed the test PDF on 2026-06-21.
+paddleocr==3.7.0
+paddlex==3.7.1
+onnxruntime==1.23.2
+opencv-contrib-python==4.10.0.84
+numpy==2.2.6
+pillow==12.2.0
