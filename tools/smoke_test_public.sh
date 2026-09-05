@@ -29,6 +29,8 @@ required_files=(
   "paddleocr_input.sh"
   "paddle_batch_ocr.py"
   "paddle_json_to_searchable_pdf.py"
+  "docs/DEVELOPMENT_BACKGROUND.md"
+  "docs/DEVELOPMENT_BACKGROUND_en.md"
   "code/aggregate_paddle_outputs.py"
   "code/compress_pdf_150dpi.py"
   "code/merge_pdfs.py"

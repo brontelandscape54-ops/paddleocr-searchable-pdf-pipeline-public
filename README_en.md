@@ -14,6 +14,8 @@ A practical pipeline for turning PDFs, single images, or image folders into sear
 - **Character-by-character font fallback** — M PLUS 1p is combined with Jigmo/Jigmo2/Jigmo3 for broad CJK coverage.
 - **Reproducible setup and validation** — pinned OCR dependencies, verified font downloads, PDF/CMap regression tests, and searchable-text verification.
 
+For the practical problems that motivated the project, the comparison work involving NDL Classical OCR Lite, Yomitoku, Marker, and PaddleOCR, and the design decisions that followed, see [Development Background and Design Rationale](docs/DEVELOPMENT_BACKGROUND_en.md).
+
 ## Layout preservation: tables and figures
 
 The searchable PDF keeps the original scanned page as the visible layer and places OCR text over it as an invisible Unicode text layer. As a result, tables, ruled lines, illustrations, seals, marginal notes, unusual line arrangements, and other complex visual layouts remain visually unchanged instead of being reconstructed from OCR output.

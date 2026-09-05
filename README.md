@@ -14,6 +14,8 @@ PaddleOCRを利用して、PDF・単一画像・画像フォルダから**検索
 - **文字単位のフォントフォールバック** — M PLUS 1p と Jigmo / Jigmo2 / Jigmo3 を組み合わせ、広いCJK文字範囲を扱います。
 - **再現性と検証を重視** — OCR依存関係の固定、フォント取得時の整合性確認、PDF/CMap回帰テスト、検索テキスト保持確認を行います。
 
+このpipelineがどのような実務上の問題から生まれ、NDL古典OCR-Lite・Yomitoku・Marker等との比較を経てPaddleOCR中心の構成になったかは、[開発背景と設計判断](docs/DEVELOPMENT_BACKGROUND.md) にまとめています。
+
 ## 図表・複雑な版面に向いている理由
 
 検索可能PDFでは、**元のスキャン画像そのものを表示面として保持**し、その上にOCR結果を透明なUnicodeテキストとして配置します。
