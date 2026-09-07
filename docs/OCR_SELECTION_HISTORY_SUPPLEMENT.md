@@ -147,45 +147,67 @@ characters: 815
 
 この区別を明記しておかないと、「Markerのセル数が168なのか231なのか」という見かけ上の矛盾が生じます。
 
-## 6. 231セル版の比較ビューへ発展
+## 6. 231セル版の比較ビューへ発展し、PaddleOCRの相対差が明瞭になった
 
-231個のMarker TableCellを比較基準として、`compare_ocr_cells_marker231.py` を作成しました。
+231個のMarker TableCellを比較基準として、
+`compare_ocr_cells_marker231.py` を作成しました。
 
-この比較では、
+Markerは `blocks.json` の各 `TableCell.text_lines`、
+Yomitoku-lite / fullはMarkdown表を21行×11列へ対応させ、
+NDL / PaddleOCRは文字bboxをMarkerの各TableCellへ空間的に割り当てました。
 
-```text
-Marker
-  → blocks.json の各 TableCell.text_lines
+生成物は `ocr_cell_comparison_marker231.csv`、
+`ocr_cell_comparison_marker231.html`、
+`ocr_cell_comparison_marker231_assets/` です。
 
-Yomitoku-lite / Yomitoku-full
-  → Markdown表を21行×11列へ対応
+HTMLでは、原画像セル、Marker、Yomitoku-lite/full、NDL、PaddleOCR、
+Markerとの文字列類似度、PaddleOCR confidence、
+全一致・多数一致・空欄・相違等を確認できるようにしました。
 
-NDL / PaddleOCR
-  → 文字bboxをMarkerの各TableCellへ空間的に割り当て
-```
+比較HTML上のMarker集計は231 explicit TableCells、
+191文字ありセル、40空セル、727非空白文字でした。
 
-という方式を採りました。
+これは別のTableCell対応処理で記録された
+212 text items / 815 charactersとは異なる集計です。
+`212 text items` を「212個の文字入りTableCell」と読み替えてはいけません。
 
-生成物は次のような構成でした。
+### 重要だったのはPaddleOCRの相対差
 
-```text
-ocr_cell_comparison_marker231.csv
-ocr_cell_comparison_marker231.html
-ocr_cell_comparison_marker231_assets/
-```
+Markerとの平均文字列類似度は、
+Yomitoku-lite 87.1%、Yomitoku-full 87.9%、NDL 77.6%、
+Paddle-small 96.1%でした。
 
-HTMLでは、原画像セル、Marker、Yomitoku-lite/full、NDL、PaddleOCR、Markerとの文字列類似度、PaddleOCR confidence、全一致・多数一致・空欄・相違等を確認できるようにしました。
+完全一致率は、
+Marker × Yomitoku-lite 64.7%、
+Marker × Yomitoku-full 66.8%、
+Marker × NDL 62.0%、
+Marker × Paddle-small 86.8%でした。
 
-これは、評価方法が
+したがって、当時重要だったのは「PaddleOCRが96.1%だった」という
+絶対値だけではありません。
 
-```text
-全文文字数
-→ 全文文字列類似度
-→ 168セル画像付き比較
-→ 231個の明示的TableCellを使った比較
-```
+同一のMarkerセル基準で比較したとき、PaddleOCRは平均類似度で
+Yomitoku-fullより8.2ポイント、Yomitoku-liteより9.0ポイント、
+NDLより18.5ポイント高く、
+完全一致率ではそれぞれ20.0、22.1、24.8ポイント高い値を示しました。
 
-へ段階的に精密化したことを示しています。
+Markerはground truthではなく、この比較を一般的なOCR精度ランキングと
+みなすことはできません。しかし、**同じ比較フレームの中で
+PaddleOCRの相対的な近さが際立っていた**という観察は、
+PaddleOCRを単なる軽量候補から
+「単独で実用化できるか試す候補」へ位置づけ直すうえで重要でした。
+
+一方、231セル比較には、OCR bboxをMarkerセルへ空間的に割り当てたために
+隣接文字や重複文字が同じセルへ入った可能性のある例もあります。
+したがって、セル比較上の差分をすべて純粋な文字認識誤りとはみなしません。
+
+この点も、最終成果物が論理的な表再構築ではなく
+原画像保持型searchable PDFであるなら、
+PaddleOCR自身のtext + bboxを直接利用してMarker TableCellへの
+再割当工程を省く方が単純である、という後の設計判断と整合します。
+
+評価方法は、全文文字数、全文文字列類似度、168セル画像付き比較、
+231個の明示的TableCellを使った比較へ段階的に精密化しました。
 
 ## 7. 開発史上の結論
 

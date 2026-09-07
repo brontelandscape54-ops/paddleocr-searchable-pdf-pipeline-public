@@ -245,31 +245,69 @@ Marker TableCellへ各OCR bboxを空間割り当て
 
 この方針により、単純な全文類似度を「精度」と誤解することを避け、実際の史料上の各セルで何が起きているかを確認できました。
 
-## 12. Marker TableCellを基準にPaddleOCR bboxを直接比較
+## 12. 231個のMarker TableCellを共通基準にすると、PaddleOCRの相対差が明瞭だった
 
-最終的には、MarkerのTableCell境界へPaddleOCRの文字bboxを割り当て、同じセルの文字列を直接比較しました。
+評価をさらに精密化するため、後のMarker `blocks.json` で確認された
+21行×11列 = 231個の明示的TableCellを比較フレームとして使いました。
 
-PaddleOCRの1ページ試験は次の結果でした。
+これは前節までの168セル比較とは別段階です。
+168セルはOCRを無効にしたlayout-only経路で得た比較フレームであり、
+231セルはOCRを含む別のMarker出力で確認された明示的TableCellです。
 
-```text
-OCR行数: 214
-文字数: 726
-平均 confidence: 0.9741
-```
+231セル版では、Markerは各 `TableCell.text_lines`、
+Yomitoku-lite / fullは21行×11列のMarkdown表、
+NDL / PaddleOCRは文字bboxをMarkerセルへ空間的に割り当てて比較しました。
 
-Markerのセル境界へPaddleOCR bboxを割り当てた比較では、
+PaddleOCRの1ページ試験では次の値を得ていました。
 
-```text
-双方に文字があるセル: 182
-完全一致: 158
-平均文字列類似度: 約96.1%
-```
+- OCR領域: 214
+- 文字数: 726
+- 平均confidence: 0.9741
 
-となりました。
+この231セル比較でMarkerとの平均文字列類似度を比べると、
 
-この値は、特定の日本語表資料・当時の設定に対する実務試験です。PaddleOCRが一般にMarkerや他OCRより優れることを示すベンチマークではありません。また、PaddleOCR単独の表構造復元能力を評価したものでもありません。
+| OCR | Markerとの平均文字列類似度 |
+| --- | ---: |
+| Yomitoku-lite | 87.1% |
+| Yomitoku-full | 87.9% |
+| NDL | 77.6% |
+| Paddle-small | 96.1% |
 
-ただし、**この資料ではPaddleOCRだけでも文字認識とbboxの両方が十分実用的**であると判断する材料にはなりました。
+でした。
+
+セル単位の完全一致率は、
+
+| OCRペア | 完全一致 / 双方文字あり | 完全一致率 |
+| --- | ---: | ---: |
+| Marker × Yomitoku-lite | 121 / 187 | 64.7% |
+| Marker × Yomitoku-full | 125 / 187 | 66.8% |
+| Marker × NDL | 114 / 184 | 62.0% |
+| Marker × Paddle-small | 158 / 182 | 86.8% |
+
+でした。
+
+つまり当時重要だったのは、Paddle-smallの平均類似度が96.1%だったという
+絶対値だけではありません。同じMarkerセル基準の中で、
+PaddleOCRがYomitoku-fullより8.2ポイント、Yomitoku-liteより9.0ポイント、
+NDLより18.5ポイント高い平均類似度を示し、
+完全一致率でもそれぞれ20.0、22.1、24.8ポイント高かったことが、
+PaddleOCRを単なる軽量候補以上のものとして見る強い材料になりました。
+
+ただし、Markerはground truthではありません。
+Marker自身が誤るセルもあり、多数決も正解とは限らないため、
+この比較は一般的なOCR精度ランキングではなく、
+特定の日本語表資料・当時の設定における相対比較です。
+
+また、NDL / PaddleOCRのbboxをMarkerセルへ割り当てる過程では、
+隣接文字や重複文字が同じセルへ入る可能性もありました。
+したがって、セル比較上の差分をすべて純粋な文字認識誤りとはみなしません。
+
+それでも、この比較は
+**PaddleOCR単独でも実用的な文字認識とbboxを得られる可能性が高い**
+と判断する大きな材料になりました。
+そして最終成果物が論理的な表復元ではなく原画像保持型searchable PDFだったため、
+Marker TableCellへの再割当工程そのものを本番から省けることも、
+後の単独化につながりました。
 
 ## 13. なぜMarker + PaddleOCRハイブリッドを最終採用しなかったのか
 

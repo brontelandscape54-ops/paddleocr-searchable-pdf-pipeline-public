@@ -243,29 +243,65 @@ A particularly important rule was that **majority agreement among OCR engines wa
 
 This made it possible to avoid treating whole-output similarity as “accuracy” and instead examine what happened at each location in the actual source page.
 
-## 12. PaddleOCR bounding boxes were then compared directly inside Marker TableCells
+## 12. A 231-TableCell comparison made PaddleOCR's relative separation much clearer
 
-The final comparison assigned PaddleOCR OCR boxes to Marker TableCell boundaries and compared text within the same spatial cells.
+The evaluation was refined again using 21 rows × 11 columns = 231 explicit
+Marker TableCells found in a later Marker `blocks.json`.
 
-A one-page PaddleOCR test produced:
+This was a different stage from the earlier 168-cell comparison.
+The 168-cell frame came from a layout-only path with Marker OCR disabled,
+whereas the 231 cells were explicit TableCells observed in a different
+Marker output with OCR enabled.
 
-```text
-OCR lines: 214
-characters: 726
-mean confidence: 0.9741
-```
+In the 231-cell comparison, Marker used each `TableCell.text_lines`,
+Yomitoku-lite / full were mapped to the 21×11 Markdown-table structure,
+and NDL / PaddleOCR text bboxes were spatially assigned to Marker cells.
 
-For cells containing text on both sides:
+A one-page PaddleOCR test had produced:
 
-```text
-text-bearing cells on both sides: 182
-exact matches:                    158
-mean string similarity:           about 96.1%
-```
+- 214 OCR regions;
+- 726 characters;
+- mean confidence 0.9741.
 
-These values describe one specific Japanese table page and one development configuration. They are not evidence that PaddleOCR is generally superior to Marker or other OCR systems, and they do not evaluate PaddleOCR's standalone table-structure reconstruction capability.
+Mean string similarity against Marker in the 231-cell comparison was:
 
-They did, however, show that **for this material, PaddleOCR alone provided both usable recognition and usable bounding boxes**.
+| OCR | Mean string similarity against Marker |
+| --- | ---: |
+| Yomitoku-lite | 87.1% |
+| Yomitoku-full | 87.9% |
+| NDL | 77.6% |
+| Paddle-small | 96.1% |
+
+Exact-match rates were:
+
+| OCR pair | Exact / both nonempty | Exact rate |
+| --- | ---: | ---: |
+| Marker × Yomitoku-lite | 121 / 187 | 64.7% |
+| Marker × Yomitoku-full | 125 / 187 | 66.8% |
+| Marker × NDL | 114 / 184 | 62.0% |
+| Marker × Paddle-small | 158 / 182 | 86.8% |
+
+The historically important observation was therefore not merely the absolute
+96.1% value. Under the same Marker-cell comparison frame, PaddleOCR exceeded
+Yomitoku-full, Yomitoku-lite, and NDL by 8.2, 9.0, and 18.5 percentage points
+respectively in mean similarity, and by 20.0, 22.1, and 24.8 percentage points
+respectively in exact-match rate.
+
+Marker was not ground truth. Marker itself could be wrong, and majority
+agreement among OCR systems was not assumed to be correct. These figures are
+therefore not a general OCR-accuracy ranking; they document relative behavior
+on one specific Japanese table page under the development configuration.
+
+Spatially assigning NDL / PaddleOCR bboxes into Marker cells also introduced
+another possible error surface: neighboring or duplicated text could be placed
+into the same comparison cell. Such differences were therefore not treated
+automatically as pure recognition errors.
+
+Even with those limitations, this comparison was an important reason to test
+whether **PaddleOCR alone could provide practical recognition plus usable
+bounding boxes**. Because the final deliverable was an original-image-preserving
+searchable PDF rather than a logical reconstruction of the table, the
+Marker-TableCell reassignment stage could also be removed from production.
 
 ## 13. Why the Marker + PaddleOCR hybrid was not kept as the production architecture
 

@@ -139,41 +139,69 @@ Because the processing mode and Marker output representation differed, these val
 
 Recording this distinction avoids the misleading impression that the project simply changed its claimed number of table cells.
 
-## 6. The evaluation progressed to a 231-TableCell comparison view
+## 6. The 231-TableCell comparison exposed a clear relative separation for PaddleOCR
 
-A later script, `compare_ocr_cells_marker231.py`, used the 231 explicit Marker TableCells as the comparison frame.
+A later script, `compare_ocr_cells_marker231.py`, used the 231 explicit Marker
+TableCells as the comparison frame.
 
-Its mapping strategy was:
+Marker used each `TableCell.text_lines` from `blocks.json`;
+Yomitoku-lite / full were mapped from their Markdown table output to the 21×11
+structure; and NDL / PaddleOCR text bboxes were spatially assigned to the
+Marker TableCells.
 
-```text
-Marker
-  → each TableCell.text_lines from blocks.json
+The generated comparison artifacts were
+`ocr_cell_comparison_marker231.csv`,
+`ocr_cell_comparison_marker231.html`, and
+`ocr_cell_comparison_marker231_assets/`.
 
-Yomitoku-lite / Yomitoku-full
-  → map Markdown table output to the 21×11 structure
+The HTML view displayed original cell crops, Marker, Yomitoku-lite/full, NDL,
+PaddleOCR, similarity against Marker, PaddleOCR confidence, and
+agreement/disagreement status.
 
-NDL / PaddleOCR
-  → spatially assign OCR bboxes to Marker TableCells
-```
+The Marker summary in this comparison HTML was 231 explicit TableCells,
+191 nonempty Marker cells, 40 empty cells, and 727 non-whitespace characters.
 
-The generated comparison artifacts included:
+This is a different measurement from another TableCell-aware processing run
+that reported 212 text items and 815 characters.
+The historical `212 text items` value must therefore not be rewritten as
+“212 text-bearing TableCells.”
 
-```text
-ocr_cell_comparison_marker231.csv
-ocr_cell_comparison_marker231.html
-ocr_cell_comparison_marker231_assets/
-```
+### The historically important point was PaddleOCR's relative separation
 
-The HTML view displayed original cell crops, Marker, Yomitoku-lite/full, NDL, PaddleOCR, similarity against Marker, PaddleOCR confidence, and agreement/disagreement status.
+Mean string similarity against Marker was 87.1% for Yomitoku-lite,
+87.9% for Yomitoku-full, 77.6% for NDL, and 96.1% for Paddle-small.
 
-This shows how the evaluation itself became progressively more precise:
+Exact-match rates were 64.7% for Marker × Yomitoku-lite,
+66.8% for Marker × Yomitoku-full, 62.0% for Marker × NDL,
+and 86.8% for Marker × Paddle-small.
 
-```text
-whole-output character counts
-→ whole-output string similarity
-→ image-backed 168-cell comparison
-→ comparison using 231 explicit Marker TableCells
-```
+The important historical observation was therefore not merely the absolute
+96.1% value.
+
+Under the same Marker-cell comparison frame, PaddleOCR exceeded
+Yomitoku-full, Yomitoku-lite, and NDL by 8.2, 9.0, and 18.5 percentage points
+respectively in mean similarity, and by 20.0, 22.1, and 24.8 percentage points
+respectively in exact-match rate.
+
+Marker was not ground truth, so these values cannot be treated as a universal
+OCR-accuracy ranking. However, the conspicuous relative closeness of PaddleOCR
+within the shared comparison frame was an important reason it was reclassified
+from merely a lightweight alternative recognizer to a candidate worth testing
+as the sole OCR engine.
+
+The 231-cell view also contained cases consistent with spatial-assignment
+effects, such as neighboring or duplicated text being assigned to one Marker
+cell. Such differences should not automatically be classified as recognition
+errors.
+
+That distinction also supports the later architecture: because the final
+deliverable was an original-image-preserving searchable PDF rather than a
+logical reconstruction of the table, PaddleOCR text + bboxes could be used
+directly without forcing them through a Marker TableCell layer.
+
+The evaluation itself therefore progressed from whole-output character counts,
+to whole-output string similarity, to the image-backed 168-cell comparison,
+and finally to comparison using 231 explicit Marker TableCells.
 
 ## 7. Historical conclusion
 
