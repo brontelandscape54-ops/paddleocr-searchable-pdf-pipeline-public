@@ -4,8 +4,9 @@ from __future__ import annotations
 """PaddleOCR JSON中の各文字が、どのPDF埋め込みフォントに割り当てられるかを報告する。
 
 OCRやPDF生成をやり直さず、既存JSONとTTFのcmapだけから判定する。
-M PLUS 1pで扱える文字、HanaMinA/Bへフォールバックする文字、どのフォントにも
-収録されていない文字を、ページ別・全体集計の両方で確認できる。
+標準構成ではM PLUS 1pからJigmo / Jigmo2 / Jigmo3へ文字単位でフォールバックし、
+どのフォントにも収録されていない文字もページ別・全体集計の両方で確認できる。
+明示的な --font-path を指定した場合は、その優先順をそのまま監査する。
 """
 
 import argparse
