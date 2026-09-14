@@ -19,6 +19,24 @@ helper_python_works() {
   "$python_path" -c 'import fitz, PIL, reportlab, pypdf, fontTools' >/dev/null 2>&1
 }
 
+check_pdf_fonts() {
+  local python_path="$1"
+  PYTHONPATH="$ROOT${PYTHONPATH:+:$PYTHONPATH}" "$python_path" - <<'PY'
+import sys
+
+from paddle_json_to_searchable_pdf import resolve_font_paths
+
+try:
+    paths = resolve_font_paths(None)
+except (FileNotFoundError, ValueError) as exc:
+    print(exc, file=sys.stderr)
+    raise SystemExit(1)
+
+for path in paths:
+    print(path)
+PY
+}
+
 select_paddle_python() {
   local candidate
 
@@ -93,6 +111,23 @@ if ! RESOLVED_HELPER_PYTHON="$(select_helper_python)"; then
   echo "        HELPER_PYTHON=/path/to/python を指定してください。" >&2
   exit 1
 fi
+
+if ! RESOLVED_PDF_FONTS="$(check_pdf_fonts "$RESOLVED_HELPER_PYTHON" 2>&1)"; then
+  echo "[ERROR] searchable PDF用日本語フォントを解決できません。" >&2
+  echo "$RESOLVED_PDF_FONTS" >&2
+  echo "" >&2
+  echo "復旧方法:" >&2
+  echo "  bash tools/setup_fonts.sh" >&2
+  echo "" >&2
+  echo "独自フォントを使う場合:" >&2
+  echo "  PADDLE_PDF_FONTS=/path/to/font1.ttf:/path/to/font2.ttf ./paddleocr.sh ..." >&2
+  exit 1
+fi
+
+echo "[INFO] PDF fonts:"
+while IFS= read -r font_path; do
+  [ -n "$font_path" ] && echo "  $font_path"
+done <<< "$RESOLVED_PDF_FONTS"
 
 export PADDLE_PYTHON="$RESOLVED_PADDLE_PYTHON"
 export HELPER_PYTHON="$RESOLVED_HELPER_PYTHON"
