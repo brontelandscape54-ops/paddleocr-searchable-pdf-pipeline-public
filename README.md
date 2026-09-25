@@ -103,6 +103,30 @@ py -V:3.13 tools/setup_fonts.py --install-fonts
 
 **入力**にはPDF・単一画像・ページ画像のディレクトリを指定できます。入力ファイル・処理設定を変更するときは新しいジョブ名を使ってください。既存ジョブの中間成果物を誤って再利用しないため、Python版は入力識別記録が一致しないジョブの再利用を拒否します。
 
+### ２回目以降の実行（初回セットアップ済みの場合）
+
+仮想環境と日本語フォントのセットアップは、通常、OCRのたびに繰り返す必要はありません。新しい入力を処理する場合は、次の実行コマンドだけで開始できます。
+
+macOS（ターミナル）:
+
+```bash
+cd "/path/to/paddleocr-searchable-pdf-pipeline"
+.venv/bin/python paddleocr_cli.py "/path/to/input.pdf"
+```
+
+PDFのパスは、Finderからターミナルへのドラッグ＆ドロップや「パス名をコピー」で入力できます。リポジトリ直下の `.venv` がない既存の開発環境では、必要な依存関係を備えていれば `.venv_paddle/bin/python` をCLIの起動に使うこともできます。その場合も、CLIはOCR用・PDF処理用のPythonを別途選択します。
+
+Windows x64（PowerShell）:
+
+```powershell
+Set-Location "C:\path\to\paddleocr-searchable-pdf-pipeline"
+.\.venv\Scripts\python.exe .\paddleocr_cli.py "C:\path\to\input.pdf"
+```
+
+入力PDFのパスはエクスプローラーの「パスのコピー」で取得して貼り付けられます。環境によってはエクスプローラーからターミナルへのドラッグ＆ドロップでも指定できます。上の実行例ではPython実行ファイルのパスに空白がないため、PowerShellの `&` と引用符を省略できます。別の場所のPythonなど、空白を含む実行ファイルのパスを使う場合は `& "C:\path with spaces\python.exe" ...` の形式にしてください。
+
+job名を省略すると、新しい日時付きjob名が生成されます。同じjobを再開する場合は元の入力・設定・job名を一致させ、**入力や処理設定を変更する場合は新しいjob名を使用**してください。詳細なjob名・DPIの指定は上のセットアップ節の実行例を参照してください。
+
 ### 従来のBash版（macOSの既存利用者向け）
 
 従来の入口 `paddleocr.sh` とセットアップ `tools/setup.sh` は残しています。既存のBash版ワークフローを継続する場合に利用してください。Bash版のセットアップは回帰テスト等もまとめて実行するため、Python版の２つのセットアップコマンドと完全に同じ処理ではありません。

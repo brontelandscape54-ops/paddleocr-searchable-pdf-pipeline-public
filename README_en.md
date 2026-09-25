@@ -94,6 +94,30 @@ The tested Windows x64 host needed Microsoft Visual C++ Redistributable x64 for 
 
 **Input** can be a PDF, a single image, or a directory of page images. Use a new job name for a changed input or changed processing settings. The Python CLI refuses to reuse an existing job with a missing or mismatched input-identity record.
 
+### Subsequent runs (after first-time setup)
+
+You normally do **not** need to reinstall the Python environments or Japanese fonts for each OCR job. To process a new input, just run the CLI:
+
+macOS (Terminal):
+
+```bash
+cd "/path/to/paddleocr-searchable-pdf-pipeline"
+.venv/bin/python paddleocr_cli.py "/path/to/input.pdf"
+```
+
+Paste the input path using Finder’s Copy as Pathname command, or drag the input from Finder into Terminal. Existing development environments without a repository-local `.venv` can use `.venv_paddle/bin/python` to launch the CLI if it has the required dependencies; the CLI independently selects its OCR and PDF-processing interpreters.
+
+Windows x64 (PowerShell):
+
+```powershell
+Set-Location "C:\path\to\paddleocr-searchable-pdf-pipeline"
+.\.venv\Scripts\python.exe .\paddleocr_cli.py "C:\path\to\input.pdf"
+```
+
+Copy the input path from File Explorer with “Copy as path” and paste it into PowerShell. Dragging the file into the terminal may also insert its path, depending on the terminal environment. The executable paths above have no spaces, so PowerShell’s call operator `&` and executable-path quotes are unnecessary. For an executable path containing spaces, use the `& "C:\path with spaces\python.exe" ...` form.
+
+Omitting the job name creates a new timestamped job. When resuming an existing job, preserve its original input, settings and job name; **use a new job name for changed input or settings**. See the setup examples above for explicit job name and DPI arguments.
+
 ### Legacy Bash workflow (existing macOS users)
 
 The original `paddleocr.sh` entry point and `tools/setup.sh` remain available for users continuing an existing Bash-based workflow. Bash setup also performs regression checks, so it is not identical to the two separate Python setup commands.
