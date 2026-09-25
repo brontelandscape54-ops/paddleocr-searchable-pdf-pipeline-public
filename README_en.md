@@ -50,69 +50,60 @@ PDF / image / image folder
 
 The searchable-PDF renderer embeds real TrueType fonts and checks each font's cmap before selecting a font for each character.
 
-## Tested environment
+## Tested environments
 
-The current pipeline has been validated primarily on **macOS**.
+The **Python CLI is the primary documented entry point**, but is still experimental. The original Bash entry points remain available for existing users.
 
-- Bash
-- Python 3.10–3.13
-- PaddleOCR / PaddleX / ONNX Runtime versions pinned in `requirements-paddle.txt`
-- helper PDF/image libraries in `requirements-helper.txt`
-- optional Ghostscript (`gs`) for compressed PDF output
+- **macOS (Apple Silicon):** A disposable public export built fresh Python environments, downloaded fonts, and processed a synthetic one-page image into a searchable PDF, including a Ghostscript-compressed version with preserved extractable text, on Python 3.10.4.
+- **Physical Boot Camp Windows x64:** Python 3.13.15 AMD64 passed Python setup and synthetic image/PDF/image-directory searchable-PDF smoke tests, including a Japanese/space-containing input path.
+- **Not yet verified:** Linux end-to-end, Windows ARM64, Windows x64 emulation on ARM, actual Windows Ghostscript compression, and real-document OCR accuracy on Windows. These specific smoke tests do not establish compatibility across all Python and OS combinations.
 
-The public version avoids known macOS-only assumptions in its main pipeline where practical. Timing logs use portable `date` forms and font discovery includes common macOS and Linux locations. Linux has not yet been end-to-end validated, so it is not claimed as a tested target yet.
+This project uses Python 3.10–3.13, PaddleOCR / PaddleX / ONNX Runtime from `requirements-paddle.txt`, and PDF/image helpers from `requirements-helper.txt`. Ghostscript is optional and used only for the compressed PDF variant.
 
-## Quick setup
+## Setup and run (primary Python CLI)
 
-After cloning the repository, run:
+Clone the repository, then explicitly select an installed, supported Python interpreter. **Environment installation and font installation are separate commands.** The Python setup preserves working environments and user-supplied fonts by default and refuses to replace an existing unusable virtual environment automatically. The first OCR run may download model files.
+
+### macOS
+
+```bash
+cd "/path/to/paddleocr-searchable-pdf-pipeline"
+python3 tools/setup_python_envs.py --check
+python3 tools/setup_python_envs.py --install-envs
+python3 tools/setup_fonts.py --install-fonts
+.venv/bin/python paddleocr_cli.py "/path/to/input.pdf" --check
+.venv/bin/python paddleocr_cli.py "/path/to/input.pdf" my_new_job 180
+```
+
+Confirm that `python3` is Python 3.10–3.13. `--check` validates the input and prerequisites without creating a job. The job name and rendering DPI (`180` in this example) are optional.
+
+### Windows x64 (PowerShell)
+
+Install x64 Python 3.10–3.13 first. These commands use the Python 3.13 launcher; change `py -V:3.13` if you use another supported version.
+
+```powershell
+Set-Location "C:\path\to\paddleocr-searchable-pdf-pipeline"
+py -V:3.13 tools/setup_python_envs.py --check
+py -V:3.13 tools/setup_python_envs.py --install-envs
+py -V:3.13 tools/setup_fonts.py --install-fonts
+& ".\.venv\Scripts\python.exe" ".\paddleocr_cli.py" "C:\path\to\input.pdf" --check
+& ".\.venv\Scripts\python.exe" ".\paddleocr_cli.py" "C:\path\to\input.pdf" "my_new_job" 180
+```
+
+The tested Windows x64 host needed Microsoft Visual C++ Redistributable x64 for ONNX Runtime DLL loading. The Python CLI configures UTF-8 for its child-process logs; manual PowerShell encoding environment overrides are unnecessary.
+
+**Input** can be a PDF, a single image, or a directory of page images. Use a new job name for a changed input or changed processing settings. The Python CLI refuses to reuse an existing job with a missing or mismatched input-identity record.
+
+### Legacy Bash workflow (existing macOS users)
+
+The original `paddleocr.sh` entry point and `tools/setup.sh` remain available for users continuing an existing Bash-based workflow. Bash setup also performs regression checks, so it is not identical to the two separate Python setup commands.
 
 ```bash
 bash tools/setup.sh
-```
-
-This one command:
-
-1. checks for Python 3.10–3.13;
-2. creates or reuses `.venv_paddle` for PaddleOCR / PaddleX / ONNX Runtime;
-3. creates or reuses the helper `.venv`;
-4. downloads the recommended Japanese fonts into the ignored local `fonts/` directory;
-5. verifies pinned font sources and checksums;
-6. runs the PDF/CMap regression tests;
-7. validates a real supplementary-plane Jigmo character through PDF generation and exact extraction;
-8. runs the static public smoke test.
-
-Existing working environments are reused. Existing user-provided fonts are preserved by default.
-
-Useful options:
-
-```bash
-bash tools/setup.sh --rebuild       # rebuild both Python environments
-bash tools/setup.sh --no-fonts      # do not download recommended fonts
-bash tools/setup.sh --force-fonts   # replace setup-managed local fonts
-```
-
-Cloning the repository itself never runs external downloads. Font retrieval happens only when you explicitly run `tools/setup.sh` or `tools/setup_fonts.sh`.
-
-The normal entry point after setup is:
-
-```bash
 ./paddleocr.sh "/path/to/input.pdf"
 ```
 
-### Manual setup
-
-Advanced users can still perform each step separately:
-
-```bash
-bash tools/rebuild_paddle_venv.sh
-
-python3 -m venv .venv
-.venv/bin/python -m pip install --upgrade pip
-.venv/bin/python -m pip install -r requirements-helper.txt
-
-bash tools/setup_fonts.sh
-bash tools/smoke_test_public.sh
-```
+You do not need to install Bash to use the Python CLI on Windows.
 
 ## Japanese font fallback
 
@@ -145,7 +136,7 @@ Font binaries are intentionally **not bundled in Git history**.
 The easiest route is:
 
 ```bash
-bash tools/setup_fonts.sh
+python3 tools/setup_fonts.py --install-fonts
 ```
 
 This populates the ignored local directory:
@@ -165,7 +156,7 @@ You can instead place your own compatible TTF files under `fonts/`, use system f
 
 ```bash
 export PADDLE_PDF_FONTS="$PWD/fonts/MPLUS1p-Medium.ttf:$PWD/fonts/Jigmo.ttf:$PWD/fonts/Jigmo2.ttf:$PWD/fonts/Jigmo3.ttf"
-./paddleocr.sh "/path/to/input.pdf"
+.venv/bin/python paddleocr_cli.py "/path/to/input.pdf"
 ```
 
 The renderer also searches common system font locations on macOS and Linux, including:
@@ -203,21 +194,16 @@ To validate the supplementary-plane path against the locally installed Jigmo fon
 
 ## Usage
 
-Run OCR on a PDF:
+The primary entry point is `paddleocr_cli.py`. On macOS:
 
 ```bash
-./paddleocr.sh "/path/to/input.pdf"
+.venv/bin/python paddleocr_cli.py "/path/to/input.pdf"
+.venv/bin/python paddleocr_cli.py "/path/to/input.pdf" my_new_job 180
 ```
 
-Specify a job name and rendering DPI:
+On Windows, use `& ".\.venv\Scripts\python.exe" ".\paddleocr_cli.py" "C:\path\to\input.pdf" "my_new_job" 180`. Run the `--check` form first to validate the input and setup without writing a job.
 
-```bash
-./paddleocr.sh "/path/to/input.pdf" my_job_name 180
-```
-
-Input may be a PDF, a single image, or a directory of page images.
-
-Use a new job name when the input document changes. Existing page images and OCR JSON may otherwise be reused intentionally by the restart mechanism.
+Input can be a PDF, a single image, or a directory of page images. Use a new job name when the input or processing settings change; intermediate outputs are preserved to support safe reruns.
 
 ## Output
 
@@ -246,51 +232,44 @@ jobs/<job_name>/
 
 ## Re-running OCR
 
-Existing compact JSON is reused by default. To force OCR again:
+Existing compact JSON is reused by default. To force OCR again for the **same** input and processing settings on macOS:
 
 ```bash
-PADDLE_OVERWRITE=1 ./paddleocr.sh "/path/to/input.pdf" same_job_name 180
+PADDLE_OVERWRITE=1 .venv/bin/python paddleocr_cli.py "/path/to/input.pdf" same_job_name 180
 ```
+
+On Windows PowerShell, set `$env:PADDLE_OVERWRITE = "1"` before running the Python CLI. Use a new job name for a changed input or processing settings.
 
 ## Large PDF pages
 
-By default, PDF pages estimated to exceed 25 million pixels at the selected DPI are normalized to roughly 3400 px on the long edge before OCR. Normal-sized pages are left unchanged.
+PDF pages estimated to exceed 25 million pixels at the selected DPI are normalized to roughly 3400 px on the long edge before OCR. Normal-sized pages are left unchanged.
 
-Disable this behavior:
-
-```bash
-PADDLE_NORMALIZE_PDF=0 ./paddleocr.sh "/path/to/input.pdf"
-```
-
-Tune it:
+On macOS, disable normalization with:
 
 ```bash
-PADDLE_MAX_PIXELS=30000000 \
-PADDLE_TARGET_LONG_EDGE_PX=3800 \
-./paddleocr.sh "/path/to/input.pdf" my_job 180
+PADDLE_NORMALIZE_PDF=0 .venv/bin/python paddleocr_cli.py "/path/to/input.pdf"
 ```
+
+Or adjust its thresholds:
+
+```bash
+PADDLE_MAX_PIXELS=30000000 PADDLE_TARGET_LONG_EDGE_PX=3800 \
+  .venv/bin/python paddleocr_cli.py "/path/to/input.pdf" my_new_job 180
+```
+
+On Windows PowerShell set the corresponding environment variables, e.g. `$env:PADDLE_NORMALIZE_PDF = "0"`. Use a new job name when changing processing settings.
 
 ## Validation and smoke tests
 
-The pipeline does not treat PDF creation alone as success. After merging page PDFs, it verifies that searchable text can be extracted.
+After merging page PDFs, the pipeline verifies that text can actually be extracted. If Ghostscript is available, it can also create a compressed PDF and verify extractable-text retention. Without Ghostscript, the normal searchable PDF remains available.
 
-If Ghostscript is installed, the pipeline also creates a smaller 150-dpi-oriented PDF and checks that the compressed PDF retains an acceptable amount of extractable text. If that check fails, the invalid compressed output is removed rather than kept as a successful result.
-
-Run the static public-tree smoke test:
+After Python setup, run the exported regression tests on macOS with:
 
 ```bash
-bash tools/smoke_test_public.sh
+.venv/bin/python -m unittest discover -s tests -p 'test_*.py' -v
 ```
 
-Run an end-to-end OCR smoke test with your own input:
-
-```bash
-bash tools/smoke_test_public.sh "/path/to/input.pdf"
-```
-
-The public-release regression suite includes tests for empty OCR pages and the ReportLab ToUnicode CMap compatibility fix, including supplementary-plane Unicode mappings.
-
-Ghostscript is optional; without `gs`, the normal searchable PDF remains available and the compression stage is skipped.
+The Bash-based `bash tools/smoke_test_public.sh` remains available for static public-tree checks on macOS. Its optional end-to-end mode **still invokes the legacy Bash workflow**; it is not the Windows Python CLI smoke-test entry point.
 
 ## Third-party software
 

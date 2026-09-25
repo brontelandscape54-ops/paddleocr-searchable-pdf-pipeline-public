@@ -41,8 +41,12 @@ ocr_cell_comparison*.html
 tmp/
 temp/
 
-# Public-release staging output (generated from the private repository)
-public_release/
+# Public-release staging output and local independent public checkout(s).
+# These are generated/local trees under the private repository and must never be
+# staged merely because they are untracked. Use `git status --short --ignored`
+# when you need to confirm that they still exist locally.
+/public_release/
+/public_release_*/
 
 # Local font files. The public repository documents font setup but does not
 # bundle third-party font binaries by default.

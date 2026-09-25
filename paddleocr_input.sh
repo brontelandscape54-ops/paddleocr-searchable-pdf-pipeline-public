@@ -125,6 +125,8 @@ resolve_helper_python() {
     echo "$HELPER_PYTHON"
     return
   fi
+
+
   if [ -n "${VIRTUAL_ENV:-}" ] && [ -x "$VIRTUAL_ENV/bin/python" ]; then
     echo "$VIRTUAL_ENV/bin/python"
     return

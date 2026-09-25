@@ -61,67 +61,58 @@ PDF / 画像 / 画像フォルダ
 
 ## 動作確認環境
 
-現在、主として **macOS** で検証しています。
+**Python版CLIを標準の実行入口**として案内します。現時点では実験的な入口であり、従来のBash版も利用できます。
 
-- Bash
-- Python 3.10–3.13
-- `requirements-paddle.txt` に固定した PaddleOCR / PaddleX / ONNX Runtime
-- `requirements-helper.txt` のPDF・画像処理ライブラリ
-- 圧縮PDF生成用のGhostscript（`gs`、任意）
+- **macOS（Apple Silicon）**: Python 3.10.4で使い捨ての公開候補から仮想環境・フォントを新規構築し、合成画像１ページのOCR、検索可能PDF、Ghostscript圧縮後の文字保持を検証しました。
+- **Windows x64（物理Boot Camp環境）**: Python 3.13.15 AMD64でPython版セットアップと合成画像・PDF・画像フォルダの検索可能PDF生成、日本語・空白を含む入力パスを検証しました。
+- **未検証**: Linuxでのend-to-end実行、Windows ARM64、ARM上のWindows x64エミュレーション、Windowsでの実際のGhostscript圧縮、Windowsでの実資料OCR精度。すべてのPython/OSの組合せでの動作を保証するものではありません。
 
-主要処理から既知のmacOS固有依存はできるだけ除いており、一般的なLinuxフォントパスにも対応しています。ただしLinuxでの完全なend-to-end検証はまだ行っていないため、現時点では正式な検証済み対象とはしていません。
+Python 3.10–3.13、`requirements-paddle.txt` のPaddleOCR / PaddleX / ONNX Runtime、および `requirements-helper.txt` のPDF・画像処理ライブラリを使います。Ghostscriptは圧縮版PDFを作る場合のみ必要です。
 
-## セットアップ
+## セットアップと実行（Python版・標準入口）
 
-clone後、次を実行します。
+リポジトリをcloneしてから、インストール済みの対応Pythonを明示して実行します。Python環境の作成とフォント取得は**別々の明示的なコマンド**です。既存の正常な環境・フォントは原則再利用し、使用できない既存仮想環境をセットアップスクリプトが無断で置き換えることはありません。初回のOCR実行時にはモデルの取得が必要になる場合があります。
+
+### macOS
+
+```bash
+cd "/path/to/paddleocr-searchable-pdf-pipeline"
+python3 tools/setup_python_envs.py --check
+python3 tools/setup_python_envs.py --install-envs
+python3 tools/setup_fonts.py --install-fonts
+.venv/bin/python paddleocr_cli.py "/path/to/input.pdf" --check
+.venv/bin/python paddleocr_cli.py "/path/to/input.pdf" my_new_job 180
+```
+
+`python3` がPython 3.10–3.13を指すことを確認してください。上の `--check` はジョブを作らず入力・実行環境・フォントを検査します。最後の `180` は描画DPIで、ジョブ名・DPIを省略することもできます。
+
+### Windows x64（PowerShell）
+
+Python 3.10–3.13の**x64版**を事前に導入してください。次は検証に用いたPython 3.13の呼び出し例です。別バージョンを使う場合は `py -V:3.13` をその版に合わせて変更します。
+
+```powershell
+Set-Location "C:\path\to\paddleocr-searchable-pdf-pipeline"
+py -V:3.13 tools/setup_python_envs.py --check
+py -V:3.13 tools/setup_python_envs.py --install-envs
+py -V:3.13 tools/setup_fonts.py --install-fonts
+& ".\.venv\Scripts\python.exe" ".\paddleocr_cli.py" "C:\path\to\input.pdf" --check
+& ".\.venv\Scripts\python.exe" ".\paddleocr_cli.py" "C:\path\to\input.pdf" "my_new_job" 180
+```
+
+検証したWindows x64実機では、ONNX RuntimeのDLL読み込みのためにMicrosoft Visual C++ Redistributable x64が必要でした。Python版CLIは子プロセスの日本語ログをUTF-8で処理するため、PowerShellで文字コード用の環境変数を手動設定する必要はありません。
+
+**入力**にはPDF・単一画像・ページ画像のディレクトリを指定できます。入力ファイル・処理設定を変更するときは新しいジョブ名を使ってください。既存ジョブの中間成果物を誤って再利用しないため、Python版は入力識別記録が一致しないジョブの再利用を拒否します。
+
+### 従来のBash版（macOSの既存利用者向け）
+
+従来の入口 `paddleocr.sh` とセットアップ `tools/setup.sh` は残しています。既存のBash版ワークフローを継続する場合に利用してください。Bash版のセットアップは回帰テスト等もまとめて実行するため、Python版の２つのセットアップコマンドと完全に同じ処理ではありません。
 
 ```bash
 bash tools/setup.sh
-```
-
-このコマンドで次を行います。
-
-1. Python 3.10–3.13 の確認
-2. PaddleOCR / PaddleX / ONNX Runtime用 `.venv_paddle` の作成または再利用
-3. PDF処理等に使う `.venv` の作成または再利用
-4. 推奨日本語フォントをGit管理外の `fonts/` に取得
-5. フォント配布元・チェックサムの検証
-6. PDF/CMap回帰テスト
-7. Jigmoの補助面文字を使った実PDF生成・抽出検証
-8. public tree のstatic smoke test
-
-既存の正常な仮想環境は再利用します。利用者が自分で配置したフォントも、原則として上書きしません。
-
-主なオプション:
-
-```bash
-bash tools/setup.sh --rebuild       # 2つのPython環境を作り直す
-bash tools/setup.sh --no-fonts      # 推奨フォントを取得しない
-bash tools/setup.sh --force-fonts   # setup管理下のフォントを置換する
-```
-
-repositoryをcloneしただけでは外部ダウンロードは実行されません。フォント取得は `tools/setup.sh` または `tools/setup_fonts.sh` を明示的に実行したときだけ行われます。
-
-通常の実行入口は次です。
-
-```bash
 ./paddleocr.sh "/path/to/input.pdf"
 ```
 
-### 手動セットアップ
-
-個別に構築したい場合は、次のようにも実行できます。
-
-```bash
-bash tools/rebuild_paddle_venv.sh
-
-python3 -m venv .venv
-.venv/bin/python -m pip install --upgrade pip
-.venv/bin/python -m pip install -r requirements-helper.txt
-
-bash tools/setup_fonts.sh
-bash tools/smoke_test_public.sh
-```
+WindowsでPython版を利用するためにBashを導入する必要はありません。
 
 ## 日本語フォントフォールバック
 
@@ -154,7 +145,7 @@ Jigmo移行時には実在する10ページの日本語史料OCRで旧Hanazono�
 推奨フォントは次で取得できます。
 
 ```bash
-bash tools/setup_fonts.sh
+python3 tools/setup_fonts.py --install-fonts
 ```
 
 ローカルには次のように配置されます。
@@ -174,7 +165,7 @@ fonts/
 
 ```bash
 export PADDLE_PDF_FONTS="$PWD/fonts/MPLUS1p-Medium.ttf:$PWD/fonts/Jigmo.ttf:$PWD/fonts/Jigmo2.ttf:$PWD/fonts/Jigmo3.ttf"
-./paddleocr.sh "/path/to/input.pdf"
+.venv/bin/python paddleocr_cli.py "/path/to/input.pdf"
 ```
 
 macOS / Linux の一般的なシステムフォント場所も探索します。
@@ -212,21 +203,16 @@ Jigmo補助面のPDF経路を単独検証する場合:
 
 ## 使い方
 
-PDFをOCRする場合:
+標準入口は `paddleocr_cli.py` です。macOSでの例:
 
 ```bash
-./paddleocr.sh "/path/to/input.pdf"
+.venv/bin/python paddleocr_cli.py "/path/to/input.pdf"
+.venv/bin/python paddleocr_cli.py "/path/to/input.pdf" my_new_job 180
 ```
 
-job名と描画DPIを指定する場合:
+Windowsでは `& ".\.venv\Scripts\python.exe" ".\paddleocr_cli.py" "C:\path\to\input.pdf" "my_new_job" 180` の形式で実行します。初回の実行前には `--check` で入力と環境を確認できます。
 
-```bash
-./paddleocr.sh "/path/to/input.pdf" my_job_name 180
-```
-
-入力にはPDF、単一画像、ページ画像を入れたディレクトリを指定できます。
-
-入力文書が変わった場合は新しいjob名を使ってください。同じjob名では、再開機能により既存のページ画像やOCR JSONを意図的に再利用することがあります。
+入力にはPDF、単一画像、ページ画像を入れたディレクトリを指定できます。入力文書・処理設定を変える際は新しいジョブ名を使ってください。既存ジョブには再開用の中間成果物が残ります。
 
 ## 出力
 
@@ -255,51 +241,44 @@ jobs/<job_name>/
 
 ## OCRをやり直す
 
-既存のcompact JSONは既定で再利用されます。OCRを強制的にやり直す場合:
+既存のcompact JSONは既定で再利用します。同一の入力・設定でOCRを強制的にやり直す場合、macOSでは次のように実行します。
 
 ```bash
-PADDLE_OVERWRITE=1 ./paddleocr.sh "/path/to/input.pdf" same_job_name 180
+PADDLE_OVERWRITE=1 .venv/bin/python paddleocr_cli.py "/path/to/input.pdf" same_job_name 180
 ```
+
+Windows PowerShellでは、実行前に `$env:PADDLE_OVERWRITE = "1"` を指定してください。再実行時は元の入力・設定とジョブ名の整合性を確認し、別の入力には新しいジョブ名を使ってください。
 
 ## 大きすぎるPDFページ
 
 指定DPIで推定25 million pixelsを超えるPDFページは、既定で長辺およそ3400pxになるようOCR前に正規化します。通常サイズのページは変更しません。
 
-無効化する場合:
+macOSで正規化を無効にする場合:
 
 ```bash
-PADDLE_NORMALIZE_PDF=0 ./paddleocr.sh "/path/to/input.pdf"
+PADDLE_NORMALIZE_PDF=0 .venv/bin/python paddleocr_cli.py "/path/to/input.pdf"
 ```
 
 閾値を調整する場合:
 
 ```bash
-PADDLE_MAX_PIXELS=30000000 \
-PADDLE_TARGET_LONG_EDGE_PX=3800 \
-./paddleocr.sh "/path/to/input.pdf" my_job 180
+PADDLE_MAX_PIXELS=30000000 PADDLE_TARGET_LONG_EDGE_PX=3800 \
+  .venv/bin/python paddleocr_cli.py "/path/to/input.pdf" my_new_job 180
 ```
+
+Windows PowerShellでは対応する環境変数を `$env:PADDLE_NORMALIZE_PDF = "0"` などの形式で設定します。処理設定を変更する場合、既存ジョブの再利用は行わず新しいジョブ名を使ってください。
 
 ## 検証とsmoke test
 
-このパイプラインは「PDFが生成できた」だけでは成功扱いにしません。ページPDF結合後に、検索可能テキストを実際に抽出できることを検証します。
+検索可能PDFの生成後、実際に文字を抽出して検証します。Ghostscriptが利用できる場合は150dpi向けの圧縮版PDFも生成し、圧縮前後の文字保持を確認します。Ghostscriptがなくても通常版の検索可能PDFは作成できます。
 
-Ghostscriptがある場合は、150dpi向けの小容量PDFも生成し、圧縮前後で十分な検索テキストが保持されていることを確認します。保持確認に失敗した圧縮PDFは成功成果物として残しません。
-
-static smoke test:
+公開版に含まれるPython回帰テストは、**セットアップ後**にmacOSで次のように実行できます。
 
 ```bash
-bash tools/smoke_test_public.sh
+.venv/bin/python -m unittest discover -s tests -p 'test_*.py' -v
 ```
 
-任意の入力を使ったend-to-end OCR smoke test:
-
-```bash
-bash tools/smoke_test_public.sh "/path/to/input.pdf"
-```
-
-回帰テストには、空OCRページとReportLab ToUnicode CMap互換修正、補助面Unicodeマッピングの検証が含まれます。
-
-Ghostscriptは任意です。`gs` がなくても通常の検索可能PDFは生成でき、圧縮工程だけがスキップされます。
+従来のBash版向け `bash tools/smoke_test_public.sh` はmacOS上で公開ツリーの静的検査に利用できます。入力ファイルを渡すend-to-endモードは引き続き**Bash版を起動します**。WindowsのPython版CLI実行テストの入口ではありません。
 
 ## サードパーティソフトウェア
 

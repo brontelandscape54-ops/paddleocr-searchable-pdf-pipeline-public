@@ -45,7 +45,7 @@ The recommended setup is:
 - M PLUS 1p Medium — SIL Open Font License 1.1
 - Jigmo / Jigmo2 / Jigmo3 — CC0 1.0
 
-`tools/setup_fonts.sh` can download these fonts into the local ignored `fonts/` directory. The download is an explicit post-clone action; cloning the repository itself does not execute network downloads.
+`tools/setup_fonts.sh` and `python tools/setup_fonts.py --install-fonts` can download these fonts into the local ignored `fonts/` directory. The download is an explicit post-clone action; cloning the repository itself does not execute network downloads.
 
 The setup helper uses pinned sources and integrity checks:
 

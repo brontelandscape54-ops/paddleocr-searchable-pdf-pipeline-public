@@ -70,6 +70,7 @@ select_helper_python() {
     return 1
   fi
 
+
   local candidates=()
   if [ -n "${VIRTUAL_ENV:-}" ]; then
     candidates+=("$VIRTUAL_ENV/bin/python")

@@ -27,6 +27,7 @@ required_files=(
   "requirements-helper.txt"
   "paddleocr.sh"
   "paddleocr_input.sh"
+  "paddleocr_cli.py"
   "paddle_batch_ocr.py"
   "paddle_json_to_searchable_pdf.py"
   "docs/DEVELOPMENT_BACKGROUND.md"
@@ -45,10 +46,16 @@ required_files=(
   "tools/report_font_fallbacks.py"
   "tools/setup.sh"
   "tools/setup_fonts.sh"
+  "tools/setup_python_envs.py"
+  "tools/setup_fonts.py"
   "tools/smoke_test_public.sh"
   "tools/validate_jigmo_supplementary.py"
   "tests/test_empty_ocr_page.py"
   "tests/test_reportlab_cmap_chunking.py"
+  "tests/test_python_cli.py"
+  "tests/test_ghostscript_discovery.py"
+  "tests/test_setup_python_envs.py"
+  "tests/test_setup_fonts.py"
 )
 
 for rel in "${required_files[@]}"; do
@@ -99,6 +106,17 @@ if 'project_root.parent' in renderer:
 if 'HanaMinA.ttf' in renderer or 'HanaMinB.ttf' in renderer:
     problems.append('paddle_json_to_searchable_pdf.py: legacy Hanazono default remains')
 
+cli = (root / 'paddleocr_cli.py').read_text(encoding='utf-8')
+# Build each forbidden token from fragments, so the exporter-wide privacy
+# scan does not flag the smoke test's own source code.
+for private_reference in (
+    'PRIVATE_' 'PROJECTS0316_HELPER',
+    'HELPER_' 'RUNTIME_VERSION',
+    'runtimes/' 'helper-python',
+):
+    if private_reference in cli:
+        problems.append('paddleocr_cli.py: private helper reference remains: ' + private_reference)
+
 if problems:
     for problem in problems:
         print(f"[ERROR] {problem}", file=sys.stderr)
@@ -113,6 +131,7 @@ fi
 
 python3 -m py_compile \
   "$ROOT/paddle_batch_ocr.py" \
+  "$ROOT/paddleocr_cli.py" \
   "$ROOT/paddle_json_to_searchable_pdf.py" \
   "$ROOT/code/aggregate_paddle_outputs.py" \
   "$ROOT/code/compress_pdf_150dpi.py" \
@@ -121,6 +140,8 @@ python3 -m py_compile \
   "$ROOT/code/verify_searchable_pdf.py" \
   "$ROOT/tools/normalize_pdf_for_ocr.py" \
   "$ROOT/tools/report_font_fallbacks.py" \
+  "$ROOT/tools/setup_python_envs.py" \
+  "$ROOT/tools/setup_fonts.py" \
   "$ROOT/tools/validate_jigmo_supplementary.py"
 
 echo "[OK] Python syntax compilation"
@@ -132,7 +153,7 @@ if [ -x "$ROOT/.venv_paddle/bin/python" ]; then
     echo "[WARN] .venv_paddle exists but required OCR imports failed"
   fi
 else
-  echo "[WARN] .venv_paddle not present; run: bash tools/setup.sh"
+  echo "[WARN] .venv_paddle not present; run: python3 tools/setup_python_envs.py --install-envs"
 fi
 
 HELPER=""
@@ -150,7 +171,7 @@ done
 if [ -n "$HELPER" ]; then
   echo "[OK] helper imports: $HELPER"
 else
-  echo "[WARN] helper imports unavailable; run: bash tools/setup.sh"
+  echo "[WARN] helper imports unavailable; run: python3 tools/setup_python_envs.py --install-envs"
 fi
 
 FONT_READY=0
@@ -178,7 +199,7 @@ PY
   else
     status="$?"
     if [ "$status" -eq 2 ]; then
-      echo "[WARN] no usable Japanese TTF found automatically; run: bash tools/setup_fonts.sh"
+      echo "[WARN] no usable Japanese TTF found automatically; run: python3 tools/setup_fonts.py --install-fonts"
     else
       fail "font discovery check failed unexpectedly"
     fi
@@ -188,18 +209,18 @@ fi
 if [ -z "$INPUT_PATH" ]; then
   cat <<'EOF'
 [INFO] static smoke test completed.
-[INFO] For an end-to-end OCR smoke test, pass a PDF/image/image-directory:
+[INFO] Legacy Bash end-to-end OCR smoke test (macOS):
   bash tools/smoke_test_public.sh "/path/to/input.pdf" [job_name] [dpi]
 EOF
   exit 0
 fi
 
 [ -e "$INPUT_PATH" ] || fail "input does not exist: $INPUT_PATH"
-[ -n "$HELPER" ] || fail "helper environment is required for end-to-end smoke test; run: bash tools/setup.sh"
-[ "$FONT_READY" -eq 1 ] || fail "Japanese TTF fonts are required before end-to-end OCR; run: bash tools/setup_fonts.sh"
+[ -n "$HELPER" ] || fail "helper environment is required for legacy Bash smoke test; run: python3 tools/setup_python_envs.py --install-envs"
+[ "$FONT_READY" -eq 1 ] || fail "Japanese TTF fonts are required before end-to-end OCR; run: python3 tools/setup_fonts.py --install-fonts"
 
 if [ ! -x "$ROOT/.venv_paddle/bin/python" ]; then
-  fail ".venv_paddle is required for end-to-end smoke test; run: bash tools/setup.sh"
+  fail ".venv_paddle is required for legacy Bash smoke test; run: python3 tools/setup_python_envs.py --install-envs"
 fi
 if ! "$ROOT/.venv_paddle/bin/python" -c 'import paddleocr, paddlex, onnxruntime' >/dev/null 2>&1; then
   fail "PaddleOCR environment imports failed"

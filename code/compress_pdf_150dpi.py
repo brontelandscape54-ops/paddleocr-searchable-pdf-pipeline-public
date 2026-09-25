@@ -16,6 +16,19 @@ from pathlib import Path
 from pypdf import PdfReader
 
 
+def find_ghostscript() -> str | None:
+    """Locate a console Ghostscript executable on macOS/Linux or Windows.
+
+    Keep the historical 'gs' command as the first choice; Windows releases
+    typically provide gswin64c.exe or gswin32c.exe instead.
+    """
+    for name in ("gs", "gswin64c.exe", "gswin32c.exe"):
+        executable = shutil.which(name)
+        if executable is not None:
+            return executable
+    return None
+
+
 def extracted_character_count(path: Path) -> int:
     reader = PdfReader(str(path))
     text = "\n".join((page.extract_text() or "") for page in reader.pages)
@@ -36,7 +49,7 @@ def main() -> None:
 
     source = Path(args.input_pdf).expanduser().resolve()
     output = Path(args.output_pdf).expanduser().resolve()
-    ghostscript = shutil.which("gs")
+    ghostscript = find_ghostscript()
 
     if not source.is_file():
         raise SystemExit(f"入力PDFがありません: {source}")
