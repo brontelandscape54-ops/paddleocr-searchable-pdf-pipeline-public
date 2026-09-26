@@ -55,8 +55,9 @@ The searchable-PDF renderer embeds real TrueType fonts and checks each font's cm
 The **Python CLI is the sole supported OCR execution entry point**. The legacy Bash OCR entry points are no longer included in the current distribution.
 
 - **macOS (Apple Silicon):** A disposable public export built fresh Python environments, downloaded fonts, and processed a synthetic one-page image into a searchable PDF, including a Ghostscript-compressed version with preserved extractable text, on Python 3.10.4.
-- **Physical Boot Camp Windows x64:** Python 3.13.15 AMD64 passed Python setup and synthetic image/PDF/image-directory searchable-PDF smoke tests, including a Japanese/space-containing input path.
-- **Not yet verified:** Linux end-to-end, Windows ARM64, Windows x64 emulation on ARM, actual Windows Ghostscript compression, and real-document OCR accuracy on Windows. These specific smoke tests do not establish compatibility across all Python and OS combinations.
+- **Physical Boot Camp Windows x64:** Python 3.13.15 AMD64 built fresh Python environments and Japanese fonts in a formal fresh public checkout, where preflight was verified on a real PDF with a Japanese path. In a separate disposable public test checkout, a real ten-page Japanese document completed end-to-end OCR, searchable-PDF generation, verified ZIP finalization, and default intermediate cleanup. A cold model-cache test downloaded the OCR models automatically, `--keep-intermediates` was verified, and Ghostscript 10.08.0 performed actual 150dpi compression with 616/616 extracted characters retained on the one-page compression test.
+- **Scope note:** the Windows real-document run verifies end-to-end pipeline behavior; it is not a quantitative OCR-accuracy evaluation.
+- **Not yet verified:** Linux end-to-end, Windows ARM64, and Windows x64 emulation on ARM. These specific tests do not establish compatibility across all Python and OS combinations.
 
 This project uses Python 3.10–3.13, PaddleOCR / PaddleX / ONNX Runtime from `requirements-paddle.txt`, and PDF/image helpers from `requirements-helper.txt`. Ghostscript is optional and used only for the compressed PDF variant.
 

@@ -64,8 +64,9 @@ PDF / 画像 / 画像フォルダ
 **Python版CLIが唯一の正式なOCR実行入口**です。旧Bash実行入口は現行の配布版には含まれません。
 
 - **macOS（Apple Silicon）**: Python 3.10.4で使い捨ての公開候補から仮想環境・フォントを新規構築し、合成画像１ページのOCR、検索可能PDF、Ghostscript圧縮後の文字保持を検証しました。
-- **Windows x64（物理Boot Camp環境）**: Python 3.13.15 AMD64でPython版セットアップと合成画像・PDF・画像フォルダの検索可能PDF生成、日本語・空白を含む入力パスを検証しました。
-- **未検証**: Linuxでのend-to-end実行、Windows ARM64、ARM上のWindows x64エミュレーション、Windowsでの実際のGhostscript圧縮、Windowsでの実資料OCR精度。すべてのPython/OSの組合せでの動作を保証するものではありません。
+- **Windows x64（物理Boot Camp環境）**: Python 3.13.15 AMD64でformal fresh public checkoutからPython環境と日本語フォントを新規構築し、日本語パスを含む実資料の `--check` を確認しました。別の使い捨てpublic test checkoutでは、日本語を含む実資料10ページのOCR、検索可能PDF、検証済みZIP、標準の中間生成物整理までend-to-endで確認しました。さらに、モデルcacheなしからの自動モデル取得、`--keep-intermediates`、Ghostscript 10.08.0による実際の150dpi圧縮も確認し、1ページ圧縮試験では圧縮前後616/616文字、保持率1.000でした。
+- **検証範囲の注意**: Windows実資料試験はパイプラインのend-to-end動作確認であり、OCR認識精度の定量評価ではありません。
+- **未検証**: Linuxでのend-to-end実行、Windows ARM64、ARM上のWindows x64エミュレーション。すべてのPython/OSの組合せでの動作を保証するものではありません。
 
 Python 3.10–3.13、`requirements-paddle.txt` のPaddleOCR / PaddleX / ONNX Runtime、および `requirements-helper.txt` のPDF・画像処理ライブラリを使います。Ghostscriptは圧縮版PDFを作る場合のみ必要です。
 
