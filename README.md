@@ -61,7 +61,7 @@ PDF / 画像 / 画像フォルダ
 
 ## 動作確認環境
 
-**Python版CLIを標準の実行入口**として案内します。現時点では実験的な入口であり、従来のBash版も利用できます。
+**Python版CLIが唯一の正式なOCR実行入口**です。旧Bash実行入口は現行の配布版には含まれません。
 
 - **macOS（Apple Silicon）**: Python 3.10.4で使い捨ての公開候補から仮想環境・フォントを新規構築し、合成画像１ページのOCR、検索可能PDF、Ghostscript圧縮後の文字保持を検証しました。
 - **Windows x64（物理Boot Camp環境）**: Python 3.13.15 AMD64でPython版セットアップと合成画像・PDF・画像フォルダの検索可能PDF生成、日本語・空白を含む入力パスを検証しました。
@@ -127,18 +127,7 @@ Set-Location "C:\path\to\paddleocr-searchable-pdf-pipeline"
 
 入力PDFのパスはエクスプローラーの「パスのコピー」で取得して貼り付けられます。環境によってはエクスプローラーからターミナルへのドラッグ＆ドロップでも指定できます。上の実行例ではPython実行ファイルのパスに空白がないため、PowerShellの `&` と引用符を省略できます。別の場所のPythonなど、空白を含む実行ファイルのパスを使う場合は `& "C:\path with spaces\python.exe" ...` の形式にしてください。
 
-job名を省略すると、新しい日時付きjob名が生成されます。同じjobを再開する場合は元の入力・設定・job名を一致させ、**入力や処理設定を変更する場合は新しいjob名を使用**してください。詳細なjob名・DPIの指定は上のセットアップ節の実行例を参照してください。
-
-### 従来のBash版（macOSの既存利用者向け）
-
-従来の入口 `paddleocr.sh` とセットアップ `tools/setup.sh` は残しています。既存のBash版ワークフローを継続する場合に利用してください。Bash版のセットアップは回帰テスト等もまとめて実行するため、Python版の２つのセットアップコマンドと完全に同じ処理ではありません。
-
-```bash
-bash tools/setup.sh
-./paddleocr.sh "/path/to/input.pdf"
-```
-
-WindowsでPython版を利用するためにBashを導入する必要はありません。
+job名を省略すると、新しい日時付きjob名が生成されます。正常終了したjobを再度実行する場合も、新しいjob名を使用してください。未完了jobはログを確認し、入力や設定が異なるjobを再利用しないでください。詳細なjob名・DPIの指定は上のセットアップ節の実行例を参照してください。
 
 ## 日本語フォントフォールバック
 
@@ -214,7 +203,7 @@ macOS / Linux の一般的なシステムフォント場所も探索します。
 
 PDF生成時には、登録した各フォントと使用文字数、unsupported文字数を表示します。
 
-既存のPaddleOCR JSONから、OCRをやり直さずに詳細なフォント割当を調べるには次を使います。
+標準実行ではページ別JSONはZIPに収録されます。次の監査コマンドを実行する場合は、`--keep-intermediates`を指定したジョブのJSONディレクトリを使います。
 
 ```bash
 .venv/bin/python tools/report_font_fallbacks.py \
@@ -238,42 +227,65 @@ Jigmo補助面のPDF経路を単独検証する場合:
 
 Windowsでは `& ".\.venv\Scripts\python.exe" ".\paddleocr_cli.py" "C:\path\to\input.pdf" "my_new_job" 180` の形式で実行します。初回の実行前には `--check` で入力と環境を確認できます。
 
-入力にはPDF、単一画像、ページ画像を入れたディレクトリを指定できます。入力文書・処理設定を変える際は新しいジョブ名を使ってください。既存ジョブには再開用の中間成果物が残ります。
+入力にはPDF、単一画像、ページ画像を入れたディレクトリを指定できます。入力文書・処理設定を変える際は新しいジョブ名を使ってください。正常終了後の中間成果物は標準では削除され、OCR結果はZIPに収録されます。
 
 ## 出力
 
+Python版CLIの正常終了後、標準では次の構成になります。
+
 ```text
 jobs/<job_name>/
-├── preprocessed/
-├── pages/
-├── paddle_ocr/
-│   ├── json/
-│   ├── txt/
-│   ├── font_fallback_report/
-│   └── paddle_batch_summary.csv
-├── output/
-│   ├── <name>_paddle.txt
-│   ├── <name>_paddle.md
-│   ├── <name>_paddle.json
-│   └── <name>_paddle_pages.jsonl
+├── <name>_ocr_bundle.zip
 ├── searchable_pdf/
-│   ├── pages_pdf/
-│   ├── <name>_paddleocr_searchable.pdf
-│   └── <name>_paddleocr_searchable_small_150dpi.pdf
+│   └── <name>_paddleocr_searchable.pdf
 └── logs/
+    ├── finalization_status.log
+    └── （工程ログ・timing_summary.log等）
 ```
 
-`jobs/` はGit管理外です。中間OCR結果やトラブルシュートに役立つ情報を含むため、単なる使い捨て一時ファイルとして扱う設計ではありません。
+ZIPには統合TXT・Markdown・JSON・JSONL、
+ページ別compact JSON・TXT、OCR集計表、
+実行設定・工程ログ等を収めます。
+検索可能PDFはZIPに含めず、その外側に保持します。
+
+150dpi圧縮版PDFが必要な場合は、
+`--generate-150dpi-pdf`を明示指定してください。
+その場合だけ`searchable_pdf/`内に
+`<name>_paddleocr_searchable_small_150dpi.pdf`が追加されます。
+このオプションを使うにはGhostscriptが必要です。
+
+```bash
+.venv/bin/python paddleocr_cli.py "/path/to/input.pdf" compressed_job 180 --generate-150dpi-pdf
+```
+
+標準では、ZIPの検証・公開後に既知の中間生成物、
+生成した正規化済みPDFと空の中間ディレクトリを削除します。
+
+中間生成物を調査用に残す場合だけ、
+`--keep-intermediates`を指定します。
+
+```bash
+.venv/bin/python paddleocr_cli.py "/path/to/input.pdf" inspection_job 180 --keep-intermediates
+```
+
+`jobs/`はGit管理外ですが、既存のジョブを一律に削除しないでください。
+失敗したジョブの中間生成物やログ、
+古い方式で作成したジョブは個別の検証・調査に必要な場合があります。
 
 ## OCRをやり直す
 
-既存のcompact JSONは既定で再利用します。同一の入力・設定でOCRを強制的にやり直す場合、macOSでは次のように実行します。
+正常終了したジョブのZIPは上書きしません。
+同じ入力をもう一度OCRする場合も、新しいジョブ名を指定してください。
 
 ```bash
-PADDLE_OVERWRITE=1 .venv/bin/python paddleocr_cli.py "/path/to/input.pdf" same_job_name 180
+.venv/bin/python paddleocr_cli.py "/path/to/input.pdf" another_job_name 180
 ```
 
-Windows PowerShellでは、実行前に `$env:PADDLE_OVERWRITE = "1"` を指定してください。再実行時は元の入力・設定とジョブ名の整合性を確認し、別の入力には新しいジョブ名を使ってください。
+入力や処理設定を変更する場合も、
+必ず別のジョブ名を使用してください。
+
+失敗したジョブについては、ログと最終化ステータスを確認してから
+処理方法を判断し、既存の成果物を無断で削除・上書きしないでください。
 
 ## 大きすぎるPDFページ
 
@@ -296,7 +308,7 @@ Windows PowerShellでは対応する環境変数を `$env:PADDLE_NORMALIZE_PDF =
 
 ## 検証とsmoke test
 
-検索可能PDFの生成後、実際に文字を抽出して検証します。Ghostscriptが利用できる場合は150dpi向けの圧縮版PDFも生成し、圧縮前後の文字保持を確認します。Ghostscriptがなくても通常版の検索可能PDFは作成できます。
+検索可能PDFの生成後、ページ数と抽出可能な文字を検証し、OCR成果物をZIPに収録して整合性を検査します。150dpi圧縮版PDFは`--generate-150dpi-pdf`指定時だけ生成し、ページ数と抽出テキストの保持を検証します。Ghostscriptがなくても通常版の検索可能PDFは作成できます。
 
 公開版に含まれるPython回帰テストは、**セットアップ後**にmacOSで次のように実行できます。
 
@@ -304,7 +316,7 @@ Windows PowerShellでは対応する環境変数を `$env:PADDLE_NORMALIZE_PDF =
 .venv/bin/python -m unittest discover -s tests -p 'test_*.py' -v
 ```
 
-従来のBash版向け `bash tools/smoke_test_public.sh` はmacOS上で公開ツリーの静的検査に利用できます。入力ファイルを渡すend-to-endモードは引き続き**Bash版を起動します**。WindowsのPython版CLI実行テストの入口ではありません。
+`bash tools/smoke_test_public.sh`は公開ツリーの静的検査を行います。入力ファイルを指定した場合のend-to-endモードはPython版CLIを起動し、ZIP・検索可能PDF・最終化ステータス・中間出力整理も確認します。このシェルスクリプト自体はWindows向けの実行入口ではありません。
 
 ## サードパーティソフトウェア
 

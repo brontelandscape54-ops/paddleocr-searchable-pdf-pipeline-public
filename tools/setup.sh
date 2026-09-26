@@ -146,7 +146,7 @@ cat <<'EOF'
 [DONE] setup completed.
 
 Run OCR with:
-  ./paddleocr.sh "/path/to/input.pdf"
+  .venv/bin/python paddleocr_cli.py "/path/to/input.pdf"
 
 For an end-to-end smoke test with your own input:
   bash tools/smoke_test_public.sh "/path/to/input.pdf"

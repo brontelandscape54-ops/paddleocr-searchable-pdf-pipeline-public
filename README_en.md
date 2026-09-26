@@ -52,7 +52,7 @@ The searchable-PDF renderer embeds real TrueType fonts and checks each font's cm
 
 ## Tested environments
 
-The **Python CLI is the primary documented entry point**, but is still experimental. The original Bash entry points remain available for existing users.
+The **Python CLI is the sole supported OCR execution entry point**. The legacy Bash OCR entry points are no longer included in the current distribution.
 
 - **macOS (Apple Silicon):** A disposable public export built fresh Python environments, downloaded fonts, and processed a synthetic one-page image into a searchable PDF, including a Ghostscript-compressed version with preserved extractable text, on Python 3.10.4.
 - **Physical Boot Camp Windows x64:** Python 3.13.15 AMD64 passed Python setup and synthetic image/PDF/image-directory searchable-PDF smoke tests, including a Japanese/space-containing input path.
@@ -116,18 +116,7 @@ Set-Location "C:\path\to\paddleocr-searchable-pdf-pipeline"
 
 Copy the input path from File Explorer with “Copy as path” and paste it into PowerShell. Dragging the file into the terminal may also insert its path, depending on the terminal environment. The executable paths above have no spaces, so PowerShell’s call operator `&` and executable-path quotes are unnecessary. For an executable path containing spaces, use the `& "C:\path with spaces\python.exe" ...` form.
 
-Omitting the job name creates a new timestamped job. When resuming an existing job, preserve its original input, settings and job name; **use a new job name for changed input or settings**. See the setup examples above for explicit job name and DPI arguments.
-
-### Legacy Bash workflow (existing macOS users)
-
-The original `paddleocr.sh` entry point and `tools/setup.sh` remain available for users continuing an existing Bash-based workflow. Bash setup also performs regression checks, so it is not identical to the two separate Python setup commands.
-
-```bash
-bash tools/setup.sh
-./paddleocr.sh "/path/to/input.pdf"
-```
-
-You do not need to install Bash to use the Python CLI on Windows.
+Omitting the job name creates a new timestamped job. Use a new job name whenever rerunning OCR after a completed job, including for unchanged input. Inspect logs before deciding how to handle an incomplete job; never reuse a job with changed input or settings. See the setup examples above for explicit job name and DPI arguments.
 
 ## Japanese font fallback
 
@@ -203,7 +192,7 @@ If no usable Japanese TTF is found, searchable-PDF generation stops with an erro
 
 PDF generation prints each registered font and its used-character count. Unsupported characters are also reported.
 
-For a detailed audit from existing PaddleOCR JSON, without rerunning OCR or regenerating the PDF, use:
+Per-page compact OCR JSON is stored in the ZIP by default. To audit font assignments with the following command, use a JSON directory retained with `--keep-intermediates`:
 
 ```bash
 .venv/bin/python tools/report_font_fallbacks.py \
@@ -227,42 +216,62 @@ The primary entry point is `paddleocr_cli.py`. On macOS:
 
 On Windows, use `& ".\.venv\Scripts\python.exe" ".\paddleocr_cli.py" "C:\path\to\input.pdf" "my_new_job" 180`. Run the `--check` form first to validate the input and setup without writing a job.
 
-Input can be a PDF, a single image, or a directory of page images. Use a new job name when the input or processing settings change; intermediate outputs are preserved to support safe reruns.
+Input can be a PDF, a single image, or a directory of page images. Use a new job name when the input or processing settings change; the standard completed job stores OCR results in the ZIP and removes known intermediates.
 
 ## Output
 
+A successful standard Python CLI run leaves:
+
 ```text
 jobs/<job_name>/
-├── preprocessed/
-├── pages/
-├── paddle_ocr/
-│   ├── json/
-│   ├── txt/
-│   ├── font_fallback_report/
-│   └── paddle_batch_summary.csv
-├── output/
-│   ├── <name>_paddle.txt
-│   ├── <name>_paddle.md
-│   ├── <name>_paddle.json
-│   └── <name>_paddle_pages.jsonl
+├── <name>_ocr_bundle.zip
 ├── searchable_pdf/
-│   ├── pages_pdf/
-│   ├── <name>_paddleocr_searchable.pdf
-│   └── <name>_paddleocr_searchable_small_150dpi.pdf
+│   └── <name>_paddleocr_searchable.pdf
 └── logs/
+    ├── finalization_status.log
+    └── (stage logs, timing_summary.log, and related records)
 ```
 
-`jobs/` is intentionally excluded from Git. It contains reusable intermediate OCR results and troubleshooting information, so it should not automatically be treated as disposable temporary data.
+The ZIP contains combined TXT, Markdown, JSON and JSONL outputs,
+per-page compact OCR JSON and TXT, the OCR batch summary,
+run settings and stage logs.
+Searchable PDFs remain outside the ZIP.
+
+Request the optional 150-dpi compressed PDF explicitly with
+`--generate-150dpi-pdf`. This requires Ghostscript and adds
+`<name>_paddleocr_searchable_small_150dpi.pdf` to `searchable_pdf/`.
+
+```bash
+.venv/bin/python paddleocr_cli.py "/path/to/input.pdf" compressed_job 180 --generate-150dpi-pdf
+```
+
+After publishing and verifying the ZIP, the default run removes
+recognized intermediates, its generated normalized working PDF,
+and empty intermediate directories.
+
+To retain intermediates for inspection,
+explicitly pass `--keep-intermediates`.
+
+```bash
+.venv/bin/python paddleocr_cli.py "/path/to/input.pdf" inspection_job 180 --keep-intermediates
+```
+
+`jobs/` is excluded from Git.
+Do not indiscriminately delete existing jobs:
+failed runs and jobs from earlier versions may contain useful diagnostic data.
 
 ## Re-running OCR
 
-Existing compact JSON is reused by default. To force OCR again for the **same** input and processing settings on macOS:
+A verified ZIP belonging to a completed job is never overwritten.
+Use a new job name even when rerunning the same input and settings.
 
 ```bash
-PADDLE_OVERWRITE=1 .venv/bin/python paddleocr_cli.py "/path/to/input.pdf" same_job_name 180
+.venv/bin/python paddleocr_cli.py "/path/to/input.pdf" another_job_name 180
 ```
 
-On Windows PowerShell, set `$env:PADDLE_OVERWRITE = "1"` before running the Python CLI. Use a new job name for a changed input or processing settings.
+Use a distinct job name whenever the input or processing settings change.
+Inspect logs and finalization status before handling an incomplete job;
+do not silently delete or overwrite its existing outputs.
 
 ## Large PDF pages
 
@@ -285,7 +294,7 @@ On Windows PowerShell set the corresponding environment variables, e.g. `$env:PA
 
 ## Validation and smoke tests
 
-After merging page PDFs, the pipeline verifies that text can actually be extracted. If Ghostscript is available, it can also create a compressed PDF and verify extractable-text retention. Without Ghostscript, the normal searchable PDF remains available.
+After merging page PDFs, the pipeline verifies page count and extractable text, then builds and verifies an OCR output ZIP. The 150-dpi compressed PDF is generated only when explicitly requested with `--generate-150dpi-pdf`; its page count and extracted text are checked. Ghostscript is not required for the normal searchable PDF.
 
 After Python setup, run the exported regression tests on macOS with:
 
@@ -293,7 +302,7 @@ After Python setup, run the exported regression tests on macOS with:
 .venv/bin/python -m unittest discover -s tests -p 'test_*.py' -v
 ```
 
-The Bash-based `bash tools/smoke_test_public.sh` remains available for static public-tree checks on macOS. Its optional end-to-end mode **still invokes the legacy Bash workflow**; it is not the Windows Python CLI smoke-test entry point.
+`bash tools/smoke_test_public.sh` performs static public-tree checks. When given an input file, its end-to-end mode invokes the Python CLI and checks the ZIP, searchable PDF, finalization status, and intermediate cleanup. The shell script itself is not the Windows execution entry point.
 
 ## Third-party software
 

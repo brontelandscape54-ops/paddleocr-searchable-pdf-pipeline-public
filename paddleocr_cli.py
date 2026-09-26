@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
-"""Experimental, Bash-free orchestration for the existing PaddleOCR pipeline.
+"""Python CLI for the PaddleOCR searchable-PDF pipeline.
 
-This entry point deliberately leaves the OCR and PDF rendering algorithms unchanged.
-It is not yet a replacement for paddleocr.sh or the Bash-based setup scripts.
+This entry point orchestrates existing OCR and PDF rendering components without changing their underlying algorithms.
 """
 from __future__ import annotations
 
@@ -234,8 +233,13 @@ def validate_job_identity(job: Path, identity: dict[str, object]) -> None:
     """Refuse unsafe reuse *before* writing logs or touching existing page/JSON files."""
     if not job.exists():
         return
-    if not job.is_dir():
-        raise PipelineError(f"job出力先がフォルダではありません: {job}")
+    if job.is_symlink() or not job.is_dir():
+        raise PipelineError(f"job出力先が安全なフォルダではありません: {job}")
+    if any(job.glob("*_ocr_bundle.zip")):
+        raise PipelineError(
+            f"既にZIPが存在するjobは再実行できません: {job}。"
+            "新しいjob名を指定してください。"
+        )
     if not any(job.iterdir()):
         return
     record = job / "logs" / INPUT_IDENTITY_FILENAME
@@ -289,9 +293,88 @@ def run_stage(
             raise PipelineError(f"{label} failed: exit={result}; log={log_path}")
 
 
+def run_finalization(
+    job: Path,
+    stem: str,
+    root: Path,
+    helper: Path,
+    *,
+    keep_intermediates: bool,
+    generate_150dpi_pdf: bool,
+) -> Path:
+    """Run finalization and record its overall result outside the ZIP."""
+    log_path = job / "logs" / "finalization_status.log"
+    archive = job / f"{stem}_ocr_bundle.zip"
+
+    if log_path.is_symlink():
+        raise PipelineError(f"Unsafe finalization status log: {log_path}")
+
+    command = [
+        str(helper),
+        str(root / "tools" / "finalize_paddle_outputs.py"),
+        str(job),
+        stem,
+    ]
+    if keep_intermediates:
+        command.append("--keep-intermediates")
+    if generate_150dpi_pdf:
+        command.append("--require-compressed")
+
+    log_path.write_text(
+        "status=pending\nphase=finalization\n",
+        encoding="utf-8",
+    )
+
+    try:
+        result = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
+            env=python_child_env(),
+        )
+    except OSError as exc:
+        log_path.write_text(
+            f"status=failed\nphase=finalization\nerror={exc}\n",
+            encoding="utf-8",
+        )
+        raise PipelineError(
+            f"Finalization could not start: {exc}"
+        ) from exc
+
+    if result.stdout:
+        print(result.stdout, end="", flush=True)
+    if result.stderr:
+        print(result.stderr, end="", file=sys.stderr, flush=True)
+
+    succeeded = result.returncode == 0 and archive.is_file()
+    log_path.write_text(
+        f"status={'success' if succeeded else 'failed'}\n"
+        "phase=finalization\n"
+        f"exit={result.returncode}\n"
+        f"archive_published={int(archive.is_file())}\n"
+        f"keep_intermediates={int(keep_intermediates)}\n"
+        f"compressed_pdf_requested={int(generate_150dpi_pdf)}\n"
+        f"stderr={result.stderr!r}\n",
+        encoding="utf-8",
+    )
+
+    if not succeeded:
+        raise PipelineError(
+            f"Finalization failed: exit={result.returncode}; "
+            f"archive_published={archive.is_file()}; log={log_path}"
+        )
+
+    return archive
+
+
 def run_pipeline(
     input_path: Path, root: Path, paths: dict[str, Path | str],
     paddle: Path, helper: Path, dpi: int,
+    *, keep_intermediates: bool = False,
+    generate_150dpi_pdf: bool = False,
 ) -> None:
     job = paths["job"]
     assert isinstance(job, Path)
@@ -314,6 +397,15 @@ def run_pipeline(
     started = dt.datetime.now()
     start_perf = time.monotonic()
     status = 1
+    finalization_log = logs / "finalization_status.log"
+    if finalization_log.is_symlink():
+        raise PipelineError(
+            f"Unsafe finalization status log: {finalization_log}"
+        )
+    finalization_log.write_text(
+        "status=pending\nphase=ocr_pdf\n",
+        encoding="utf-8",
+    )
 
     def path(key: str) -> Path:
         result = paths[key]
@@ -355,6 +447,8 @@ def run_pipeline(
             "PADDLE_OVERWRITE": os.environ.get("PADDLE_OVERWRITE", "0"),
             "PADDLE_PY": paddle, "HELPER_PY": helper,
             "MERGED_PDF": path("merged"), "SMALL_PDF": path("small"),
+            "GENERATE_150DPI_PDF": int(generate_150dpi_pdf),
+            "KEEP_INTERMEDIATES": int(keep_intermediates),
         }
         (logs / "00_run_config.txt").write_text(
             "".join(f"{key}={value}\n" for key, value in config.items()), encoding="utf-8"
@@ -437,29 +531,54 @@ def run_pipeline(
                               str(path("pdf_pages")), str(path("merged"))]),
             ("06_verify_pdf", [str(helper), str(root / "code/verify_searchable_pdf.py"),
                                str(path("merged"))]),
-            ("07_compress_pdf", [str(helper), str(root / "code/compress_pdf_150dpi.py"),
-                                 str(path("merged")), str(path("small"))]),
         ):
             run_stage(label, command, logs)
+
+        if generate_150dpi_pdf:
+            run_stage(
+                "07_compress_pdf",
+                [str(helper), str(root / "code/compress_pdf_150dpi.py"),
+                 str(path("merged")), str(path("small")),
+                 "--require-ghostscript"],
+                logs,
+            )
         status = 0
-        print("\n=== PADDLEOCR PIPELINE FINISHED ===", flush=True)
+        print("\n=== OCR/PDF STAGES FINISHED ===", flush=True)
         for key in ("job", "pages", "json", "txt", "output", "pdf_pages", "merged", "small", "logs"):
             print(f"{key.upper():<18}: {path(key)}", flush=True)
     finally:
         ended = dt.datetime.now()
         seconds = int(time.monotonic() - start_perf)
         (logs / "timing_summary.log").write_text(
-            f"status={status}\nstart={started:%Y-%m-%d %H:%M:%S}\n"
+            f"status={status}\nscope=ocr_pdf_stages\nstart={started:%Y-%m-%d %H:%M:%S}\n"
             f"end={ended:%Y-%m-%d %H:%M:%S}\nelapsed_seconds={seconds}\n"
             f"elapsed_hms={seconds // 3600:02d}:{seconds // 60 % 60:02d}:{seconds % 60:02d}\n"
             f"script={Path(__file__).name}\nargs={input_path}\n",
             encoding="utf-8",
         )
 
+        if status != 0:
+            finalization_log.write_text(
+                "status=failed\nphase=ocr_pdf\n",
+                encoding="utf-8",
+            )
+
+    archive = run_finalization(
+        job,
+        str(paths["prefix"]),
+        root,
+        helper,
+        keep_intermediates=keep_intermediates,
+        generate_150dpi_pdf=generate_150dpi_pdf,
+    )
+    print("\n=== PADDLEOCR PIPELINE FINISHED ===", flush=True)
+    print(f"OUTPUT_BUNDLE: {archive}", flush=True)
+    print(f"SEARCHABLE_PDF: {path('merged')}", flush=True)
+
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Experimental Python entry point; existing Bash CLI remains supported."
+        description="PaddleOCR searchable-PDF pipeline (Python CLI)."
     )
     parser.add_argument("input_path", help="PDF, image, or directory containing page images")
     parser.add_argument("job_name", nargs="?", help="Optional job name")
@@ -467,6 +586,16 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--check", action="store_true",
         help="Check input, Python interpreters and PDF fonts without creating a job",
+    )
+    parser.add_argument(
+        "--keep-intermediates",
+        action="store_true",
+        help="Keep generated intermediate files after ZIP verification",
+    )
+    parser.add_argument(
+        "--generate-150dpi-pdf",
+        action="store_true",
+        help="Explicitly request a compressed searchable PDF",
     )
     args = parser.parse_args(argv)
     input_path = Path(args.input_path).expanduser().resolve()
@@ -483,7 +612,11 @@ def main(argv: list[str] | None = None) -> int:
             print("[OK] preflight completed; no job created")
             return 0
         paths = paths_for(input_path, ROOT, args.job_name, dt.datetime.now())
-        run_pipeline(input_path, ROOT, paths, paddle, helper, args.dpi)
+        run_pipeline(
+            input_path, ROOT, paths, paddle, helper, args.dpi,
+            keep_intermediates=args.keep_intermediates,
+            generate_150dpi_pdf=args.generate_150dpi_pdf,
+        )
         return 0
     except (PipelineError, OSError, ValueError) as exc:
         print(f"[ERROR] {exc}", file=sys.stderr, flush=True)

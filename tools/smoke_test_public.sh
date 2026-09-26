@@ -25,9 +25,8 @@ required_files=(
   "THIRD_PARTY_LICENSES.md"
   "requirements-paddle.txt"
   "requirements-helper.txt"
-  "paddleocr.sh"
-  "paddleocr_input.sh"
   "paddleocr_cli.py"
+  "tools/finalize_paddle_outputs.py"
   "paddle_batch_ocr.py"
   "paddle_json_to_searchable_pdf.py"
   "docs/DEVELOPMENT_BACKGROUND.md"
@@ -53,6 +52,8 @@ required_files=(
   "tests/test_empty_ocr_page.py"
   "tests/test_reportlab_cmap_chunking.py"
   "tests/test_python_cli.py"
+  "tests/test_cli_full_synthetic.py"
+  "tests/test_paddle_output_bundle.py"
   "tests/test_ghostscript_discovery.py"
   "tests/test_setup_python_envs.py"
   "tests/test_setup_fonts.py"
@@ -132,6 +133,7 @@ fi
 python3 -m py_compile \
   "$ROOT/paddle_batch_ocr.py" \
   "$ROOT/paddleocr_cli.py" \
+  "$ROOT/tools/finalize_paddle_outputs.py" \
   "$ROOT/paddle_json_to_searchable_pdf.py" \
   "$ROOT/code/aggregate_paddle_outputs.py" \
   "$ROOT/code/compress_pdf_150dpi.py" \
@@ -209,33 +211,107 @@ fi
 if [ -z "$INPUT_PATH" ]; then
   cat <<'EOF'
 [INFO] static smoke test completed.
-[INFO] Legacy Bash end-to-end OCR smoke test (macOS):
+[INFO] Python CLI end-to-end OCR smoke test:
   bash tools/smoke_test_public.sh "/path/to/input.pdf" [job_name] [dpi]
 EOF
   exit 0
 fi
 
 [ -e "$INPUT_PATH" ] || fail "input does not exist: $INPUT_PATH"
-[ -n "$HELPER" ] || fail "helper environment is required for legacy Bash smoke test; run: python3 tools/setup_python_envs.py --install-envs"
+[ -n "$HELPER" ] || fail "helper environment is required for Python CLI smoke test; run: python3 tools/setup_python_envs.py --install-envs"
 [ "$FONT_READY" -eq 1 ] || fail "Japanese TTF fonts are required before end-to-end OCR; run: python3 tools/setup_fonts.py --install-fonts"
 
 if [ ! -x "$ROOT/.venv_paddle/bin/python" ]; then
-  fail ".venv_paddle is required for legacy Bash smoke test; run: python3 tools/setup_python_envs.py --install-envs"
+  fail ".venv_paddle is required for Python CLI smoke test; run: python3 tools/setup_python_envs.py --install-envs"
 fi
 if ! "$ROOT/.venv_paddle/bin/python" -c 'import paddleocr, paddlex, onnxruntime' >/dev/null 2>&1; then
   fail "PaddleOCR environment imports failed"
 fi
 
 echo "=== end-to-end pipeline smoke test ==="
-"$ROOT/paddleocr.sh" "$INPUT_PATH" "$JOB_NAME" "$DPI"
+"$HELPER" "$ROOT/paddleocr_cli.py" "$INPUT_PATH" "$JOB_NAME" "$DPI"
 
 JOB_DIR="$ROOT/jobs/$JOB_NAME"
 [ -d "$JOB_DIR" ] || fail "job directory not created: $JOB_DIR"
 
-SEARCHABLE=("$JOB_DIR"/searchable_pdf/*_paddleocr_searchable.pdf)
-if [ ! -e "${SEARCHABLE[0]}" ]; then
-  fail "normal searchable PDF not found"
-fi
+"$HELPER" - "$JOB_DIR" <<'PYVERIFY'
+from pathlib import Path
+import sys
+import zipfile
 
-echo "[OK] end-to-end searchable PDF produced: ${SEARCHABLE[0]}"
+from pypdf import PdfReader
+
+job = Path(sys.argv[1])
+
+archives = list(job.glob("*_ocr_bundle.zip"))
+normal_pdfs = list(
+    (job / "searchable_pdf").glob("*_paddleocr_searchable.pdf")
+)
+
+assert len(archives) == 1, f"Expected one OCR bundle: {archives}"
+assert len(normal_pdfs) == 1, f"Expected one searchable PDF: {normal_pdfs}"
+
+archive = archives[0]
+normal_pdf = normal_pdfs[0]
+
+assert archive.is_file()
+assert normal_pdf.is_file()
+
+with zipfile.ZipFile(archive) as bundle:
+    assert bundle.testzip() is None, "ZIP integrity check failed"
+    members = set(bundle.namelist())
+
+    assert any(
+        item.startswith("paddle_ocr/json/page_")
+        and item.endswith("_paddle_small.json")
+        for item in members
+    ), "Page OCR JSON missing from ZIP"
+
+    assert "logs/timing_summary.log" in members
+    assert "logs/finalization_status.log" not in members
+    assert not any(item.endswith(".pdf") for item in members)
+
+pdf = PdfReader(str(normal_pdf))
+assert len(pdf.pages) >= 1
+
+assert any(
+    (page.extract_text() or "").strip()
+    for page in pdf.pages
+), "Searchable PDF has no extractable text"
+
+status_log = job / "logs" / "finalization_status.log"
+assert status_log.is_file()
+
+status_lines = set(
+    status_log.read_text(encoding="utf-8").splitlines()
+)
+
+assert "status=success" in status_lines
+assert "archive_published=1" in status_lines
+
+for relative in (
+    "preprocessed",
+    "pages",
+    "output",
+    "paddle_ocr/json",
+    "paddle_ocr/txt",
+    "searchable_pdf/pages_pdf",
+):
+    directory = job / relative
+
+    assert not directory.exists() and not directory.is_symlink(), (
+        f"Intermediate directory remains: {directory}"
+    )
+
+assert not list(
+    (job / "searchable_pdf").glob(
+        "*_paddleocr_searchable_small_150dpi.pdf"
+    )
+), "Unrequested compressed PDF remains"
+
+print(f"[OK] verified OCR ZIP: {archive}")
+print(f"[OK] verified searchable PDF: {normal_pdf}")
+print("[OK] finalization status and intermediate cleanup")
+PYVERIFY
+
 echo "[DONE] public smoke test passed"

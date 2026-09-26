@@ -40,6 +40,11 @@ def main() -> None:
     parser.add_argument("input_pdf")
     parser.add_argument("output_pdf")
     parser.add_argument(
+        "--require-ghostscript",
+        action="store_true",
+        help="Fail instead of skipping when Ghostscript is unavailable",
+    )
+    parser.add_argument(
         "--minimum-text-ratio",
         type=float,
         default=0.90,
@@ -56,6 +61,11 @@ def main() -> None:
     if not 0.0 <= args.minimum_text_ratio <= 1.0:
         raise SystemExit("--minimum-text-ratio は0から1で指定してください")
     if ghostscript is None:
+        if args.require_ghostscript:
+            raise SystemExit(
+                "[ERROR] 150dpi版PDFを要求しましたが、"
+                "Ghostscriptが見つかりません"
+            )
         print("[SKIP] Ghostscriptがないため圧縮版を生成しません", flush=True)
         return
 
