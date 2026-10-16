@@ -238,7 +238,8 @@ Python版CLIの正常終了後、標準では次の構成になります。
 jobs/<job_name>/
 ├── <name>_ocr_bundle.zip
 ├── searchable_pdf/
-│   └── <name>_paddleocr_searchable.pdf
+│   ├── <name>_paddleocr_searchable.pdf
+│   └── <name>_paddleocr_searchable_small_150dpi.pdf  # Ghostscriptがある場合
 └── logs/
     ├── finalization_status.log
     └── （工程ログ・timing_summary.log等）
@@ -249,14 +250,21 @@ ZIPには統合TXT・Markdown・JSON・JSONL、
 実行設定・工程ログ等を収めます。
 検索可能PDFはZIPに含めず、その外側に保持します。
 
-150dpi圧縮版PDFが必要な場合は、
-`--generate-150dpi-pdf`を明示指定してください。
-その場合だけ`searchable_pdf/`内に
-`<name>_paddleocr_searchable_small_150dpi.pdf`が追加されます。
-このオプションを使うにはGhostscriptが必要です。
+Ghostscriptが見つかる場合は、標準で150dpi圧縮版PDFも生成します。
+Ghostscriptが見つからなければ警告を表示し、
+通常版PDFのみを生成します。
+
+`--generate-150dpi-pdf`は圧縮版を必須とする指定です。
+Ghostscriptがない場合はエラーになります。
+
+`--no-generate-150dpi-pdf`は圧縮版の生成を無効化します。
+
+Ghostscriptが検出されても圧縮工程自体が失敗した場合は、
+ジョブは失敗扱いとなり、中間生成物を保持します。
 
 ```bash
-.venv/bin/python paddleocr_cli.py "/path/to/input.pdf" compressed_job 180 --generate-150dpi-pdf
+.venv/bin/python paddleocr_cli.py "/path/to/input.pdf" required_job 180 --generate-150dpi-pdf
+.venv/bin/python paddleocr_cli.py "/path/to/input.pdf" normal_only_job 180 --no-generate-150dpi-pdf
 ```
 
 標準では、ZIPの検証・公開後に既知の中間生成物、
@@ -309,7 +317,7 @@ Windows PowerShellでは対応する環境変数を `$env:PADDLE_NORMALIZE_PDF =
 
 ## 検証とsmoke test
 
-検索可能PDFの生成後、ページ数と抽出可能な文字を検証し、OCR成果物をZIPに収録して整合性を検査します。150dpi圧縮版PDFは`--generate-150dpi-pdf`指定時だけ生成し、ページ数と抽出テキストの保持を検証します。Ghostscriptがなくても通常版の検索可能PDFは作成できます。
+検索可能PDFの生成後、ページ数と抽出可能な文字を検証し、OCR成果物をZIPに収録して整合性を検査します。150dpi圧縮版PDFはGhostscriptが利用可能なら標準で生成し、ページ数と抽出テキストの保持を検証します。Ghostscriptがなくても通常版の検索可能PDFは作成できます。
 
 公開版に含まれるPython回帰テストは、**セットアップ後**にmacOSで次のように実行できます。
 

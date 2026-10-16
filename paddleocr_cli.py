@@ -12,6 +12,7 @@ import json
 import os
 from pathlib import Path
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -592,10 +593,19 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Keep generated intermediate files after ZIP verification",
     )
-    parser.add_argument(
+    compression = parser.add_mutually_exclusive_group()
+    compression.add_argument(
         "--generate-150dpi-pdf",
+        dest="generate_150dpi_pdf",
         action="store_true",
-        help="Explicitly request a compressed searchable PDF",
+        default=None,
+        help="Require a compressed searchable PDF (Ghostscript required)",
+    )
+    compression.add_argument(
+        "--no-generate-150dpi-pdf",
+        dest="generate_150dpi_pdf",
+        action="store_false",
+        help="Disable compressed PDF generation",
     )
     args = parser.parse_args(argv)
     input_path = Path(args.input_path).expanduser().resolve()
@@ -611,11 +621,34 @@ def main(argv: list[str] | None = None) -> int:
         if args.check:
             print("[OK] preflight completed; no job created")
             return 0
+        ghostscript_available = any(
+            shutil.which(name) is not None
+            for name in ("gs", "gswin64c.exe", "gswin32c.exe")
+        )
+
+        if args.generate_150dpi_pdf is True:
+            generate_compressed = True
+            if not ghostscript_available:
+                raise PipelineError(
+                    "150dpi PDF explicitly requested, but Ghostscript "
+                    "is not available"
+                )
+        elif args.generate_150dpi_pdf is False:
+            generate_compressed = False
+        else:
+            generate_compressed = ghostscript_available
+            if not ghostscript_available:
+                print(
+                    "[WARN] Ghostscript unavailable; generating only "
+                    "the normal searchable PDF",
+                    flush=True,
+                )
+
         paths = paths_for(input_path, ROOT, args.job_name, dt.datetime.now())
         run_pipeline(
             input_path, ROOT, paths, paddle, helper, args.dpi,
             keep_intermediates=args.keep_intermediates,
-            generate_150dpi_pdf=args.generate_150dpi_pdf,
+            generate_150dpi_pdf=generate_compressed,
         )
         return 0
     except (PipelineError, OSError, ValueError) as exc:

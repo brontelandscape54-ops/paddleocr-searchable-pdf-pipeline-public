@@ -74,7 +74,8 @@ class SyntheticCliEndToEndTests(unittest.TestCase):
         self,
         *,
         keep_intermediates=False,
-        generate_150dpi_pdf=False,
+        generate_150dpi_pdf=None,
+        ghostscript_available=True,
         missing_compressed_pdf=False,
         failing_stage=None,
     ):
@@ -178,8 +179,10 @@ class SyntheticCliEndToEndTests(unittest.TestCase):
         ]
         if keep_intermediates:
             args.append("--keep-intermediates")
-        if generate_150dpi_pdf:
+        if generate_150dpi_pdf is True:
             args.append("--generate-150dpi-pdf")
+        elif generate_150dpi_pdf is False:
+            args.append("--no-generate-150dpi-pdf")
 
         output = io.StringIO()
         errors = io.StringIO()
@@ -209,6 +212,13 @@ class SyntheticCliEndToEndTests(unittest.TestCase):
                 "subprocess",
                 process_api,
             ),
+            mock.patch.object(
+                cli.shutil,
+                "which",
+                return_value=(
+                    "/synthetic/gs" if ghostscript_available else None
+                ),
+            ),
             contextlib.redirect_stdout(output),
             contextlib.redirect_stderr(errors),
         ):
@@ -232,7 +242,11 @@ class SyntheticCliEndToEndTests(unittest.TestCase):
         self.assertEqual(result, 0, errors)
         self.assertTrue(self.archive.is_file())
         self.assertTrue(self.paths["merged"].is_file())
-        self.assertFalse(self.paths["small"].exists())
+        self.assertTrue(self.paths["small"].is_file())
+        self.assertIn(
+            "compressed_pdf_requested=1\n",
+            self.status_text(),
+        )
         self.assertFalse(
             (self.paths["pages"] / "page_0001.png").exists()
         )
@@ -279,6 +293,43 @@ class SyntheticCliEndToEndTests(unittest.TestCase):
                     "logs/timing_summary.log"
                 ).decode("utf-8"),
             )
+
+    def test_default_without_ghostscript_skips_compression(self):
+        result, output, errors = self.run_synthetic_cli(
+            ghostscript_available=False
+        )
+        self.assertEqual(result, 0, errors)
+        self.assertTrue(self.archive.is_file())
+        self.assertTrue(self.paths["merged"].is_file())
+        self.assertFalse(self.paths["small"].exists())
+        self.assertIn("Ghostscript unavailable", output)
+        self.assertIn(
+            "compressed_pdf_requested=0\n",
+            self.status_text(),
+        )
+
+    def test_explicit_disable_skips_compression(self):
+        result, _, errors = self.run_synthetic_cli(
+            generate_150dpi_pdf=False,
+            ghostscript_available=True,
+        )
+        self.assertEqual(result, 0, errors)
+        self.assertTrue(self.archive.is_file())
+        self.assertTrue(self.paths["merged"].is_file())
+        self.assertFalse(self.paths["small"].exists())
+        self.assertIn(
+            "compressed_pdf_requested=0\n",
+            self.status_text(),
+        )
+
+    def test_explicit_request_without_ghostscript_fails(self):
+        result, _, errors = self.run_synthetic_cli(
+            generate_150dpi_pdf=True,
+            ghostscript_available=False,
+        )
+        self.assertEqual(result, 1)
+        self.assertIn("Ghostscript", errors)
+        self.assertFalse(self.job.exists())
 
     def test_keep_intermediates_preserves_page_files(self):
         result, _, errors = self.run_synthetic_cli(

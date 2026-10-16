@@ -236,6 +236,7 @@ JOB_DIR="$ROOT/jobs/$JOB_NAME"
 
 "$HELPER" - "$JOB_DIR" <<'PYVERIFY'
 from pathlib import Path
+import shutil
 import sys
 import zipfile
 
@@ -303,11 +304,54 @@ for relative in (
         f"Intermediate directory remains: {directory}"
     )
 
-assert not list(
+compressed_pdfs = list(
     (job / "searchable_pdf").glob(
         "*_paddleocr_searchable_small_150dpi.pdf"
     )
-), "Unrequested compressed PDF remains"
+)
+
+ghostscript_available = any(
+    shutil.which(name) is not None
+    for name in ("gs", "gswin64c.exe", "gswin32c.exe")
+)
+
+expected_status = (
+    f"compressed_pdf_requested={int(ghostscript_available)}"
+)
+
+assert expected_status in status_lines, (
+    f"Compression request status mismatch: {expected_status}"
+)
+
+if ghostscript_available:
+    assert len(compressed_pdfs) == 1, (
+        f"Expected compressed PDF: {compressed_pdfs}"
+    )
+
+    compressed = PdfReader(str(compressed_pdfs[0]))
+
+    assert len(compressed.pages) == len(pdf.pages)
+
+    for index, (normal_page, compressed_page) in enumerate(
+        zip(pdf.pages, compressed.pages), start=1
+    ):
+        normal_text = "".join(
+            (normal_page.extract_text() or "").split()
+        )
+        compressed_text = "".join(
+            (compressed_page.extract_text() or "").split()
+        )
+
+        assert normal_text == compressed_text, (
+            f"Compressed PDF text mismatch on page {index}"
+        )
+
+    print("[OK] default 150-dpi PDF and page text verified")
+else:
+    assert not compressed_pdfs, (
+        f"Unexpected compressed PDF: {compressed_pdfs}"
+    )
+    print("[OK] normal-only output without Ghostscript")
 
 print(f"[OK] verified OCR ZIP: {archive}")
 print(f"[OK] verified searchable PDF: {normal_pdf}")
